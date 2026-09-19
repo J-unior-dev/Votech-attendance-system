@@ -50,16 +50,17 @@ app.get("/api/test-db", async (req, res) => {
       data: rows,
     });
   } catch (error) {
-    console.error("Database error:", error);
+    console.error("DATABASE ERROR:", error);
 
-    res.status(500).json({
-      success: false,
-      message: "Database connection failed",
-    });
+res.status(500).json({
+  success: false,
+  message: "Database connection failed",
+  error: error.message,
+});
   }
 });
 
 // Start server
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`VSAMS Backend running on port ${PORT}`);
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
