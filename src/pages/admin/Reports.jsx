@@ -14,7 +14,7 @@ import {
 import AdminLayout from "../../components/AdminLayout";
 import SchoolLogo from "../../components/SchoolLogo";
 
-const API_BASE_URL ="http://localhost:5000";
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 function Reports() {
   const today = new Date();
 
