@@ -48,21 +48,42 @@ function Dashboard() {
         fetch(`${API_BASE}/api/attendance/records?date=${todayString}`),
       ]);
 
+      if (!staffResponse.ok) {
+        throw new Error("Failed to load staff data");
+      }
+
+      if (!attendanceResponse.ok) {
+        throw new Error("Failed to load attendance data");
+      }
+
       const staffData = await staffResponse.json();
       const attendanceData = await attendanceResponse.json();
+
+      console.log("Dashboard staff response:", staffData);
+      console.log("Dashboard attendance response:", attendanceData);
 
       const staffList = Array.isArray(staffData)
         ? staffData
         : staffData.staff || staffData.data || [];
 
+      // IMPORTANT:
+      // Backend returns attendance inside "attendance"
       const attendanceList = Array.isArray(attendanceData)
         ? attendanceData
-        : attendanceData.records || attendanceData.data || [];
+        : attendanceData.attendance ||
+          attendanceData.records ||
+          attendanceData.data ||
+          [];
 
-      setStaff(staffList);
-      setAttendance(attendanceList);
+      setStaff(Array.isArray(staffList) ? staffList : []);
+      setAttendance(
+        Array.isArray(attendanceList) ? attendanceList : []
+      );
     } catch (error) {
       console.error("Dashboard loading error:", error);
+
+      setStaff([]);
+      setAttendance([]);
     } finally {
       setLoading(false);
     }
@@ -110,6 +131,7 @@ function Dashboard() {
 
     if (/^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
       const [hours, minutes] = value.split(":");
+
       const date = new Date();
       date.setHours(Number(hours), Number(minutes), 0, 0);
 
@@ -131,9 +153,17 @@ function Dashboard() {
     return value;
   };
 
+  /*
+   * ============================================================
+   * DASHBOARD STATISTICS
+   * ============================================================
+   */
+
   const dashboardStats = useMemo(() => {
+    // Total registered staff
     const totalStaff = staff.length;
 
+    // Active staff only
     const activeStaff = staff.filter((person) => {
       const status = String(
         person.status ?? person.statues ?? "Active"
@@ -142,50 +172,139 @@ function Dashboard() {
       return status !== "inactive";
     }).length;
 
-    const presentRecords = attendance.filter((record) => {
-      return Boolean(getSignIn(record));
-    });
-
-    const presentToday = presentRecords.length;
-
-    const lateToday = attendance.filter((record) => {
-      return String(record.status || "").toLowerCase() === "late";
-    }).length;
-
-    const presentStaffIds = new Set(
-      presentRecords
+    /*
+     * Get unique staff members who signed in today.
+     *
+     * We use a Set so that one person cannot be counted
+     * multiple times if duplicate attendance records exist.
+     */
+    const signedInStaffIds = new Set(
+      attendance
+        .filter((record) => {
+          return Boolean(getSignIn(record));
+        })
         .map((record) =>
           String(
             record.staff_id ??
               record.staffId ??
               record.staffID ??
-              record.id ??
               ""
           )
         )
         .filter(Boolean)
     );
 
-    const absentToday = Math.max(totalStaff - presentToday, 0);
+    // Number of staff actually present today
+    const presentToday = signedInStaffIds.size;
 
-    const incompleteToday = attendance.filter((record) => {
-      return Boolean(getSignIn(record)) && !getSignOut(record);
-    }).length;
+    /*
+     * Get unique staff members who are late today.
+     */
+    const lateStaffIds = new Set(
+      attendance
+        .filter((record) => {
+          return (
+            Boolean(getSignIn(record)) &&
+            String(record.status || "").toLowerCase() === "late"
+          );
+        })
+        .map((record) =>
+          String(
+            record.staff_id ??
+              record.staffId ??
+              record.staffID ??
+              ""
+          )
+        )
+        .filter(Boolean)
+    );
 
-    const earlyDepartureToday = attendance.filter((record) => {
-      const signOut = getSignOut(record);
+    // Number of staff who are late today
+    const lateToday = lateStaffIds.size;
 
-      if (!signOut) return false;
+    /*
+     * Absent = active staff who have not signed in today.
+     */
+    const absentToday = Math.max(
+      activeStaff - presentToday,
+      0
+    );
 
-      const value = String(signOut).substring(0, 5);
+    /*
+     * Staff who signed in but have not signed out.
+     */
+    const incompleteStaffIds = new Set(
+      attendance
+        .filter((record) => {
+          return Boolean(getSignIn(record)) && !getSignOut(record);
+        })
+        .map((record) =>
+          String(
+            record.staff_id ??
+              record.staffId ??
+              record.staffID ??
+              ""
+          )
+        )
+        .filter(Boolean)
+    );
 
-      return value < "17:00";
-    }).length;
+    const incompleteToday = incompleteStaffIds.size;
 
+    /*
+     * Staff who signed out before 5:00 PM.
+     */
+    const earlyDepartureStaffIds = new Set(
+      attendance
+        .filter((record) => {
+          const signOut = getSignOut(record);
+
+          if (!signOut) return false;
+
+          const value = String(signOut).substring(0, 5);
+
+          return value < "17:00";
+        })
+        .map((record) =>
+          String(
+            record.staff_id ??
+              record.staffId ??
+              record.staffID ??
+              ""
+          )
+        )
+        .filter(Boolean)
+    );
+
+    const earlyDepartureToday =
+      earlyDepartureStaffIds.size;
+
+    /*
+     * Today's attendance percentage.
+     */
     const attendanceRate =
-      totalStaff > 0
-        ? Math.round((presentToday / totalStaff) * 100)
+      activeStaff > 0
+        ? Math.round((presentToday / activeStaff) * 100)
         : 0;
+
+    /*
+     * Total late minutes accumulated today.
+     */
+    const lateMinutesToday = attendance.reduce(
+      (total, record) => {
+        if (
+          String(record.status || "").toLowerCase() ===
+          "late"
+        ) {
+          return (
+            total + Number(record.late_minutes || 0)
+          );
+        }
+
+        return total;
+      },
+      0
+    );
 
     return {
       totalStaff,
@@ -196,9 +315,16 @@ function Dashboard() {
       incompleteToday,
       earlyDepartureToday,
       attendanceRate,
-      presentStaffIds,
+      lateMinutesToday,
+      presentStaffIds: signedInStaffIds,
     };
   }, [staff, attendance]);
+
+  /*
+   * ============================================================
+   * RECENT ATTENDANCE
+   * ============================================================
+   */
 
   const recentAttendance = useMemo(() => {
     return [...attendance]
@@ -210,6 +336,12 @@ function Dashboard() {
       })
       .slice(0, 8);
   }, [attendance]);
+
+  /*
+   * ============================================================
+   * FIND STAFF FOR ATTENDANCE RECORD
+   * ============================================================
+   */
 
   const getAttendanceStaff = (record) => {
     const recordId = String(
@@ -232,6 +364,7 @@ function Dashboard() {
         record.name ||
         record.full_name ||
         "Unknown Staff",
+
       department:
         record.department_name ||
         record.department ||
@@ -239,561 +372,347 @@ function Dashboard() {
     };
   };
 
+  /*
+   * ============================================================
+   * DASHBOARD UI
+   * ============================================================
+   */
+
   return (
     <AdminLayout>
-      <div className="space-y-7">
-        {/* PAGE HEADER */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
-              Dashboard
-            </p>
+      <div className="space-y-6">
 
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Attendance Overview
+        {/* HEADER */}
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Admin Dashboard
             </h1>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Monitor today's staff attendance and activity.
+            <p className="text-gray-500 mt-1">
+              Overview of staff attendance and daily activities.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
-            <FiCalendar className="h-4 w-4 text-blue-600" />
-
-            <span className="text-sm font-medium text-slate-600">
-              {formattedDate}
-            </span>
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <FiCalendar />
+            <span>{formattedDate}</span>
           </div>
         </div>
 
-        {/* WELCOME BANNER */}
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 p-7 text-white shadow-lg shadow-blue-200 sm:p-8">
-          <div className="relative z-10 max-w-2xl">
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-              <FiActivity className="h-5 w-5" />
-            </div>
+        {/* STATISTICS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
 
-            <h2 className="text-2xl font-bold sm:text-3xl">
-              Welcome back, Administrator 👋
-            </h2>
-
-            <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">
-              Here's what's happening with staff attendance today. Keep
-              track of arrivals, late staff, and attendance activity from
-              one place.
-            </p>
-
-            <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-blue-50 backdrop-blur">
-              <span className="h-2 w-2 rounded-full bg-emerald-300" />
-              Attendance system is active
-            </div>
-          </div>
-
-          <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-white/10" />
-          <div className="absolute -bottom-32 right-20 h-80 w-80 rounded-full bg-indigo-900/10" />
-        </section>
-
-        {/* MAIN STATISTICS */}
-        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {/* TOTAL STAFF */}
-          <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                <FiUsers className="h-6 w-6" />
-              </div>
-
-              <div className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
-                <FiArrowUpRight className="h-3 w-3" />
-                Active
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <p className="text-sm font-medium text-slate-500">
-                Total Staff
-              </p>
-
-              <div className="mt-1 flex items-end justify-between">
-                <p className="text-3xl font-bold tracking-tight text-slate-900">
-                  {loading ? "—" : dashboardStats.totalStaff}
-                </p>
-
-                <p className="text-xs font-medium text-slate-400">
-                  {dashboardStats.activeStaff} active
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* PRESENT */}
-          <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                <FiUserCheck className="h-6 w-6" />
-              </div>
-
-              <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
-                {dashboardStats.attendanceRate}%
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <p className="text-sm font-medium text-slate-500">
-                Present Today
-              </p>
-
-              <div className="mt-1 flex items-end justify-between">
-                <p className="text-3xl font-bold tracking-tight text-slate-900">
-                  {loading ? "—" : dashboardStats.presentToday}
-                </p>
-
-                <p className="text-xs font-medium text-slate-400">
-                  checked in
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* LATE */}
-          <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                <FiClock className="h-6 w-6" />
-              </div>
-
-              <div className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-600">
-                Attention
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <p className="text-sm font-medium text-slate-500">
-                Late Today
-              </p>
-
-              <div className="mt-1 flex items-end justify-between">
-                <p className="text-3xl font-bold tracking-tight text-slate-900">
-                  {loading ? "—" : dashboardStats.lateToday}
-                </p>
-
-                <p className="text-xs font-medium text-slate-400">
-                  late arrivals
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* ABSENT */}
-          <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-                <FiUserX className="h-6 w-6" />
-              </div>
-
-              <div className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-600">
-                Today
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <p className="text-sm font-medium text-slate-500">
-                Absent Today
-              </p>
-
-              <div className="mt-1 flex items-end justify-between">
-                <p className="text-3xl font-bold tracking-tight text-slate-900">
-                  {loading ? "—" : dashboardStats.absentToday}
-                </p>
-
-                <p className="text-xs font-medium text-slate-400">
-                  not checked in
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* SECONDARY STATISTICS */}
-        <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <FiCheckCircle className="h-5 w-5" />
-              </div>
-
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-slate-500">
-                  Attendance Rate
+                <p className="text-sm text-gray-500">
+                  Total Staff
                 </p>
-                <p className="mt-1 text-xl font-bold text-slate-900">
-                  {dashboardStats.attendanceRate}%
-                </p>
-              </div>
-            </div>
 
-            <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-all"
-                style={{
-                  width: `${Math.min(
-                    dashboardStats.attendanceRate,
-                    100
-                  )}%`,
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                <FiAlertCircle className="h-5 w-5" />
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-slate-500">
-                  Incomplete Records
-                </p>
-                <p className="mt-1 text-xl font-bold text-slate-900">
-                  {dashboardStats.incompleteToday}
-                </p>
-              </div>
-            </div>
-
-            <span className="text-xs font-semibold text-slate-400">
-              No sign-out
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
-                <FiLogOut className="h-5 w-5" />
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-slate-500">
-                  Early Departures
-                </p>
-                <p className="mt-1 text-xl font-bold text-slate-900">
-                  {dashboardStats.earlyDepartureToday}
-                </p>
-              </div>
-            </div>
-
-            <span className="text-xs font-semibold text-slate-400">
-              Before 5:00 PM
-            </span>
-          </div>
-        </section>
-
-        {/* ATTENDANCE + QUICK ACTIONS */}
-        <section className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(300px,0.8fr)]">
-          {/* ATTENDANCE TABLE */}
-          <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  Today's Attendance
+                <h2 className="text-3xl font-bold text-gray-900 mt-2">
+                  {loading ? "..." : dashboardStats.totalStaff}
                 </h2>
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Staff attendance records for today
+                <p className="text-xs text-gray-500 mt-2">
+                  {dashboardStats.activeStaff} active staff
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span className="text-xs font-semibold text-slate-600">
-                  {dashboardStats.presentToday} present
-                </span>
+              <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
+                <FiUsers className="text-blue-600 text-xl" />
               </div>
             </div>
+          </div>
 
-            <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/70">
-                    <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          {/* PRESENT TODAY */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">
+                  Present Today
+                </p>
+
+                <h2 className="text-3xl font-bold text-gray-900 mt-2">
+                  {loading ? "..." : dashboardStats.presentToday}
+                </h2>
+
+                <p className="text-xs text-green-600 mt-2">
+                  {dashboardStats.attendanceRate}% attendance rate
+                </p>
+              </div>
+
+              <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center">
+                <FiUserCheck className="text-green-600 text-xl" />
+              </div>
+            </div>
+          </div>
+
+          {/* LATE TODAY */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">
+                  Late Today
+                </p>
+
+                <h2 className="text-3xl font-bold text-gray-900 mt-2">
+                  {loading ? "..." : dashboardStats.lateToday}
+                </h2>
+
+                <p className="text-xs text-orange-600 mt-2">
+                  {dashboardStats.lateMinutesToday} total late minutes
+                </p>
+              </div>
+
+              <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center">
+                <FiClock className="text-orange-600 text-xl" />
+              </div>
+            </div>
+          </div>
+
+          {/* ABSENT TODAY */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">
+                  Absent Today
+                </p>
+
+                <h2 className="text-3xl font-bold text-gray-900 mt-2">
+                  {loading ? "..." : dashboardStats.absentToday}
+                </h2>
+
+                <p className="text-xs text-red-600 mt-2">
+                  Active staff not signed in
+                </p>
+              </div>
+
+              <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center">
+                <FiUserX className="text-red-600 text-xl" />
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* SECONDARY STATISTICS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+          {/* INCOMPLETE */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">
+                  Incomplete Attendance
+                </p>
+
+                <h2 className="text-2xl font-bold text-gray-900 mt-2">
+                  {loading ? "..." : dashboardStats.incompleteToday}
+                </h2>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  Signed in but not signed out
+                </p>
+              </div>
+
+              <div className="w-11 h-11 rounded-xl bg-yellow-50 flex items-center justify-center">
+                <FiAlertCircle className="text-yellow-600 text-xl" />
+              </div>
+            </div>
+          </div>
+
+          {/* EARLY DEPARTURE */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">
+                  Early Departure
+                </p>
+
+                <h2 className="text-2xl font-bold text-gray-900 mt-2">
+                  {loading ? "..." : dashboardStats.earlyDepartureToday}
+                </h2>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  Signed out before 5:00 PM
+                </p>
+              </div>
+
+              <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center">
+                <FiLogOut className="text-purple-600 text-xl" />
+              </div>
+            </div>
+          </div>
+
+          {/* ATTENDANCE RATE */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">
+                  Today's Attendance Rate
+                </p>
+
+                <h2 className="text-2xl font-bold text-gray-900 mt-2">
+                  {loading
+                    ? "..."
+                    : `${dashboardStats.attendanceRate}%`}
+                </h2>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  Based on active staff
+                </p>
+              </div>
+
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center">
+                <FiActivity className="text-indigo-600 text-xl" />
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* RECENT ATTENDANCE */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+
+          <div className="p-5 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Today's Attendance
+              </h2>
+
+              <p className="text-sm text-gray-500 mt-1">
+                Staff attendance records for today.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <FiZap />
+              <span>
+                {attendance.length} attendance record
+                {attendance.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+
+            {loading ? (
+              <div className="p-8 text-center text-gray-500">
+                Loading attendance...
+              </div>
+            ) : recentAttendance.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                No attendance records for today.
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="text-left px-5 py-3 font-medium">
                       Staff
                     </th>
 
-                    <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="text-left px-5 py-3 font-medium">
                       Department
                     </th>
 
-                    <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="text-left px-5 py-3 font-medium">
                       Sign In
                     </th>
 
-                    <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="text-left px-5 py-3 font-medium">
                       Sign Out
                     </th>
 
-                    <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="text-left px-5 py-3 font-medium">
                       Status
+                    </th>
+
+                    <th className="text-left px-5 py-3 font-medium">
+                      Late Minutes
                     </th>
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-slate-100">
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan="5"
-                        className="px-6 py-12 text-center text-sm text-slate-500"
+                <tbody className="divide-y divide-gray-100">
+
+                  {recentAttendance.map((record) => {
+                    const person = getAttendanceStaff(record);
+
+                    const status = String(
+                      record.status || ""
+                    ).toLowerCase();
+
+                    const isLate = status === "late";
+
+                    return (
+                      <tr
+                        key={
+                          record.attendance_id ??
+                          `${record.staff_id}-${record.attendance_date}`
+                        }
+                        className="hover:bg-gray-50"
                       >
-                        Loading attendance...
-                      </td>
-                    </tr>
-                  ) : recentAttendance.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan="5"
-                        className="px-6 py-12 text-center"
-                      >
-                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                          <FiCalendar className="h-5 w-5 text-slate-400" />
-                        </div>
 
-                        <p className="mt-3 text-sm font-semibold text-slate-700">
-                          No attendance records yet
-                        </p>
+                        <td className="px-5 py-4">
+                          <div className="font-medium text-gray-900">
+                            {getStaffName(person)}
+                          </div>
+                        </td>
 
-                        <p className="mt-1 text-xs text-slate-400">
-                          Staff attendance will appear here after scanning.
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    recentAttendance.map((record, index) => {
-                      const person = getAttendanceStaff(record);
+                        <td className="px-5 py-4 text-gray-600">
+                          {getDepartment(person)}
+                        </td>
 
-                      const status = String(
-                        record.status || "Present"
-                      ).toLowerCase();
+                        <td className="px-5 py-4 text-gray-700">
+                          {formatTime(getSignIn(record))}
+                        </td>
 
-                      const isLate = status === "late";
+                        <td className="px-5 py-4 text-gray-700">
+                          {formatTime(getSignOut(record))}
+                        </td>
 
-                      return (
-                        <tr
-                          key={
-                            record.attendance_id ||
-                            record.id ||
-                            `${getStaffId(person)}-${index}`
-                          }
-                          className="transition hover:bg-slate-50/80"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
-                                {getStaffName(person)
-                                  .charAt(0)
-                                  .toUpperCase()}
-                              </div>
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                              isLate
+                                ? "bg-orange-50 text-orange-700"
+                                : "bg-green-50 text-green-700"
+                            }`}
+                          >
+                            {isLate ? (
+                              <FiClock />
+                            ) : (
+                              <FiCheckCircle />
+                            )}
 
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-slate-800">
-                                  {getStaffName(person)}
-                                </p>
+                            {record.status || "Present"}
+                          </span>
+                        </td>
 
-                                <p className="text-[11px] text-slate-400">
-                                  Staff ID:{" "}
-                                  {getStaffId(person) || "—"}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
+                        <td className="px-5 py-4">
+                          {isLate
+                            ? `${Number(
+                                record.late_minutes || 0
+                              )} min`
+                            : "—"}
+                        </td>
 
-                          <td className="px-6 py-4 text-sm text-slate-600">
-                            {getDepartment(person)}
-                          </td>
+                      </tr>
+                    );
+                  })}
 
-                          <td className="px-6 py-4">
-                            <span className="text-sm font-semibold text-slate-700">
-                              {formatTime(getSignIn(record))}
-                            </span>
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <span className="text-sm font-semibold text-slate-700">
-                              {formatTime(getSignOut(record))}
-                            </span>
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold ${
-                                isLate
-                                  ? "bg-amber-50 text-amber-700"
-                                  : getSignIn(record) &&
-                                    !getSignOut(record)
-                                  ? "bg-blue-50 text-blue-700"
-                                  : "bg-emerald-50 text-emerald-700"
-                              }`}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 rounded-full ${
-                                  isLate
-                                    ? "bg-amber-500"
-                                    : getSignIn(record) &&
-                                      !getSignOut(record)
-                                    ? "bg-blue-500"
-                                    : "bg-emerald-500"
-                                }`}
-                              />
-
-                              {isLate
-                                ? "Late"
-                                : getSignIn(record) &&
-                                  !getSignOut(record)
-                                ? "Incomplete"
-                                : "Present"}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
                 </tbody>
+
               </table>
-            </div>
+            )}
 
-            <div className="border-t border-slate-100 px-6 py-4">
-              <a
-                href="/admin/attendance"
-                className="inline-flex items-center gap-2 text-xs font-bold text-blue-600 transition hover:text-blue-700"
-              >
-                View all attendance
-                <FiArrowUpRight className="h-3.5 w-3.5" />
-              </a>
-            </div>
           </div>
+        </div>
 
-          {/* QUICK ACTIONS */}
-          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  Quick Actions
-                </h2>
-
-                <p className="mt-1 text-xs text-slate-500">
-                  Common administration tasks
-                </p>
-              </div>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <FiZap className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              <a
-                href="/admin/staff"
-                className="group flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-blue-100 hover:bg-blue-50/50"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white">
-                  <FiUsers className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-800">
-                    Manage Staff
-                  </p>
-
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Add or update staff members
-                  </p>
-                </div>
-
-                <FiArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-blue-600" />
-              </a>
-
-              <a
-                href="/admin/attendance"
-                className="group flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-emerald-100 hover:bg-emerald-50/50"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 transition group-hover:bg-emerald-600 group-hover:text-white">
-                  <FiCheckCircle className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-800">
-                    Attendance
-                  </p>
-
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    View today's records
-                  </p>
-                </div>
-
-                <FiArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-emerald-600" />
-              </a>
-
-              <a
-                href="/admin/qr-management"
-                className="group flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-violet-100 hover:bg-violet-50/50"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600 transition group-hover:bg-violet-600 group-hover:text-white">
-                  <FiActivity className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-800">
-                    QR Tokens
-                  </p>
-
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Manage daily QR access
-                  </p>
-                </div>
-
-                <FiArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-violet-600" />
-              </a>
-
-              <a
-                href="/admin/reports"
-                className="group flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-orange-100 hover:bg-orange-50/50"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-600 transition group-hover:bg-orange-600 group-hover:text-white">
-                  <FiCalendar className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-800">
-                    Reports
-                  </p>
-
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    View monthly attendance
-                  </p>
-                </div>
-
-                <FiArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-orange-600" />
-              </a>
-            </div>
-
-            <div className="mt-6 rounded-xl bg-slate-50 p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                </div>
-
-                <div>
-                  <p className="text-xs font-bold text-slate-700">
-                    System Status
-                  </p>
-
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    Attendance system is operational
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     </AdminLayout>
   );
