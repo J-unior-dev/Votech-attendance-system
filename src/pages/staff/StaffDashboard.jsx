@@ -135,7 +135,7 @@ function StaffDashboard() {
       }
 
       const response = await fetch(
-       import.meta.env.VITE_API_URL/api/attendance/scan,
+  `${import.meta.env.VITE_API_URL}/api/attendance/scan`,
         {
           method: "POST",
           headers: {

@@ -1,5 +1,5 @@
 import {
-  BrowserRouter,
+  HashRouter,
   Routes,
   Route,
   Navigate,
@@ -33,9 +33,7 @@ import Settings from "./pages/admin/Settings";
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import ScanAttendance from "./pages/staff/ScanAttendance";
 
-
 function App() {
-
   // =====================================================
   // SPLASH SCREEN STATE
   // =====================================================
@@ -49,7 +47,6 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
-
   // =====================================================
   // SHOW SPLASH BEFORE LOGIN
   // =====================================================
@@ -57,10 +54,8 @@ function App() {
     return <SplashScreen />;
   }
 
-
   return (
-    <BrowserRouter>
-
+    <HashRouter>
       <Routes>
 
         {/* =================================================
@@ -76,7 +71,6 @@ function App() {
           }
         />
 
-
         {/* =================================================
             ADMIN LOGIN
         ================================================= */}
@@ -84,7 +78,6 @@ function App() {
           path="/login"
           element={<Login />}
         />
-
 
         {/* =================================================
             ADMIN DASHBOARD
@@ -94,7 +87,6 @@ function App() {
           element={<Dashboard />}
         />
 
-
         {/* =================================================
             ADMIN STAFF MANAGEMENT
         ================================================= */}
@@ -102,7 +94,6 @@ function App() {
           path="/admin/staff"
           element={<StaffManagement />}
         />
-
 
         {/* =================================================
             ADMIN ATTENDANCE
@@ -112,7 +103,6 @@ function App() {
           element={<Attendance />}
         />
 
-
         {/* =================================================
             ADMIN QR MANAGEMENT
         ================================================= */}
@@ -120,7 +110,6 @@ function App() {
           path="/admin/qr-management"
           element={<QRManagement />}
         />
-
 
         {/* =================================================
             ADMIN REPORTS
@@ -130,7 +119,6 @@ function App() {
           element={<Reports />}
         />
 
-
         {/* =================================================
             ADMIN SETTINGS
         ================================================= */}
@@ -138,7 +126,6 @@ function App() {
           path="/admin/settings"
           element={<Settings />}
         />
-
 
         {/* =================================================
             STAFF DASHBOARD
@@ -148,7 +135,6 @@ function App() {
           element={<StaffDashboard />}
         />
 
-
         {/* =================================================
             STAFF ATTENDANCE SCANNER
         ================================================= */}
@@ -156,7 +142,6 @@ function App() {
           path="/staff/attendance"
           element={<ScanAttendance />}
         />
-
 
         {/* =================================================
             FALLBACK
@@ -172,10 +157,8 @@ function App() {
         />
 
       </Routes>
-
-    </BrowserRouter>
+    </HashRouter>
   );
 }
-
 
 export default App;
