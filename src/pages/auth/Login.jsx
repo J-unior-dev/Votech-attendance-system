@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FiEye,
   FiEyeOff,
@@ -10,6 +11,7 @@ import {
 import SchoolLogo from "../../components/SchoolLogo";
 
 function Login() {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -113,7 +115,8 @@ function Login() {
       // =================================================
       // REDIRECT BASED ON ROLE
       // =================================================
-      window.location.href = data.redirectTo;
+    
+      navigate(data.redirectTo);
 
     } catch (error) {
       console.error("Login error:", error);
