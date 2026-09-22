@@ -14,24 +14,54 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // =====================================================
-// CORS
+// CORS CONFIGURATION
 // =====================================================
 
-const corsOptions = {
-  origin: [
-    "http://localhost:5173",
-    "https://navajowhite-crow-277801.hostingersite.com",
-  ],
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  optionsSuccessStatus: 204,
-};
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://navajowhite-crow-277801.hostingersite.com",
+];
 
-// Allow CORS for normal requests
-app.use(cors(corsOptions));
+// =====================================================
+// CORS MIDDLEWARE
+// =====================================================
 
-// Explicitly handle browser preflight requests
-app.options(/.*/, cors(corsOptions));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization"
+  );
+
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  // Handle browser preflight requests
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+// Keep the cors package enabled as an additional layer
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 
 // Parse JSON requests
 app.use(express.json());
@@ -111,6 +141,20 @@ app.get("/api/test-db", async (req, res) => {
       error: error.message,
     });
   }
+});
+
+// =====================================================
+// ERROR HANDLER
+// =====================================================
+
+app.use((err, req, res, next) => {
+  console.error("SERVER ERROR:", err);
+
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+    error: err.message,
+  });
 });
 
 // =====================================================
