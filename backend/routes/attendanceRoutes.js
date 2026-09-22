@@ -11,7 +11,7 @@ const settingsPath = path.join(
 );
 
 const defaultSettings = {
-  reportingTime: "07:45",
+  reportingTime: "07:33",
   signOutTime: "17:00",
   workingDays: {
     Tuesday: true,
@@ -150,7 +150,8 @@ router.post("/scan", async (req, res) => {
     const month = String(today.getMonth() + 1).padStart(2, "0");
     const day = String(today.getDate()).padStart(2, "0");
 
-    const attendanceDate = `${year}-${month}-${day}`;
+    const attendanceDate =
+      `${year}-${month}-${day}`;
 
 
     // -------------------------------------------------
@@ -205,16 +206,33 @@ router.post("/scan", async (req, res) => {
 
 
       // ------------------------------------------------
-      // 7:33 AM SIGN-IN DEADLINE
+      // GET ATTENDANCE SETTINGS
       // ------------------------------------------------
-      const deadlineMinutes = 7 * 60 + 33;
-      const currentMinutes = hours * 60 + minutes;
+      const settings = getAttendanceSettings();
+
+
+      // ------------------------------------------------
+      // CALCULATE REPORTING TIME
+      // ------------------------------------------------
+      const [reportHour, reportMinute] =
+        settings.reportingTime
+          .split(":")
+          .map(Number);
+
+      const deadlineMinutes =
+        reportHour * 60 + reportMinute;
+
+      const currentMinutes =
+        hours * 60 + minutes;
+
 
       let status = "Present";
       let lateMinutes = 0;
 
+
       if (currentMinutes > deadlineMinutes) {
         status = "Late";
+
         lateMinutes =
           currentMinutes - deadlineMinutes;
       }
@@ -343,7 +361,9 @@ router.post("/scan", async (req, res) => {
       // 5:00 PM SIGN-OUT TARGET
       // ------------------------------------------------
       const signOutTargetMinutes = 17 * 60;
-      const currentMinutes = hours * 60 + minutes;
+
+      const currentMinutes =
+        hours * 60 + minutes;
 
       let departureMessage =
         "Sign out successful.";
@@ -392,7 +412,10 @@ router.post("/scan", async (req, res) => {
 
   } catch (error) {
 
-    console.error("Attendance error:", error);
+    console.error(
+      "Attendance error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -464,17 +487,23 @@ router.get("/records", async (req, res) => {
   }
 });
 
+
 // =====================================================
 // MONTHLY ATTENDANCE REPORT
 // GET /api/attendance/monthly-report?month=9&year=2026
 // =====================================================
 router.get("/monthly-report", async (req, res) => {
   try {
+
     const { month, year } = req.query;
 
     const reportMonth = Number(month);
     const reportYear = Number(year);
 
+
+    // -------------------------------------------------
+    // VALIDATE MONTH AND YEAR
+    // -------------------------------------------------
     if (
       !reportMonth ||
       !reportYear ||
@@ -488,30 +517,88 @@ router.get("/monthly-report", async (req, res) => {
       });
     }
 
-    // -------------------------------------------------
-    // FIRST DAY AND LAST DAY OF MONTH
-    // -------------------------------------------------
-    const startDate = `${reportYear}-${String(
-      reportMonth
-    ).padStart(2, "0")}-01`;
 
-    const lastDay = new Date(
-      reportYear,
-      reportMonth,
-      0
-    ).getDate();
+    // -------------------------------------------------
+    // MONTH START
+    // -------------------------------------------------
+    const startDate =
+      `${reportYear}-` +
+      `${String(reportMonth).padStart(2, "0")}-01`;
 
-    const endDate = `${reportYear}-${String(
-      reportMonth
-    ).padStart(2, "0")}-${String(lastDay).padStart(
-      2,
-      "0"
-    )}`;
+
+    // -------------------------------------------------
+    // MONTH END
+    // -------------------------------------------------
+    const lastDay =
+      new Date(
+        reportYear,
+        reportMonth,
+        0
+      ).getDate();
+
+    const fullMonthEndDate =
+      `${reportYear}-` +
+      `${String(reportMonth).padStart(2, "0")}-` +
+      `${String(lastDay).padStart(2, "0")}`;
+
+
+    // -------------------------------------------------
+    // TODAY
+    // -------------------------------------------------
+    const today = new Date();
+
+    const todayYear =
+      today.getFullYear();
+
+    const todayMonth =
+      today.getMonth() + 1;
+
+    const todayDay =
+      today.getDate();
+
+    const todayString =
+      `${todayYear}-` +
+      `${String(todayMonth).padStart(2, "0")}-` +
+      `${String(todayDay).padStart(2, "0")}`;
+
+
+    // -------------------------------------------------
+    // DETERMINE REPORT END DATE
+    //
+    // Current month:
+    // stop at today.
+    //
+    // Previous month:
+    // use the complete month.
+    //
+    // Future month:
+    // no working days yet.
+    // -------------------------------------------------
+    let reportEndDate = fullMonthEndDate;
+
+    if (
+      reportYear === todayYear &&
+      reportMonth === todayMonth
+    ) {
+      reportEndDate = todayString;
+    }
+
+    if (
+      reportYear > todayYear ||
+      (
+        reportYear === todayYear &&
+        reportMonth > todayMonth
+      )
+    ) {
+      reportEndDate = null;
+    }
+
 
     // -------------------------------------------------
     // LOAD STAFF
     // -------------------------------------------------
-    const [staffRows] = await db.query(`
+    const [staffRows] = await db.query(
+      `
       SELECT
         s.staff_id,
         s.name,
@@ -524,27 +611,45 @@ router.get("/monthly-report", async (req, res) => {
       LEFT JOIN departments d
         ON s.department_id = d.department_id
       ORDER BY s.staff_id ASC
-    `);
+      `
+    );
+
 
     // -------------------------------------------------
-    // LOAD ATTENDANCE FOR MONTH
+    // LOAD ATTENDANCE
+    //
+    // DATE_FORMAT makes sure MySQL returns the date
+    // in YYYY-MM-DD format so our lookup works
+    // correctly.
     // -------------------------------------------------
-    const [attendanceRows] = await db.query(
-      `
-      SELECT
-        a.attendance_id,
-        a.staff_id,
-        a.attendance_date,
-        a.time_in,
-        a.time_out,
-        a.status,
-        a.late_minutes
-      FROM attendance a
-      WHERE a.attendance_date BETWEEN ? AND ?
-      ORDER BY a.attendance_date ASC
-      `,
-      [startDate, endDate]
-    );
+    let attendanceRows = [];
+
+    if (reportEndDate) {
+
+      [attendanceRows] = await db.query(
+        `
+        SELECT
+          a.attendance_id,
+          a.staff_id,
+          DATE_FORMAT(
+            a.attendance_date,
+            '%Y-%m-%d'
+          ) AS attendance_date,
+          a.time_in,
+          a.time_out,
+          a.status,
+          a.late_minutes
+        FROM attendance a
+        WHERE a.attendance_date BETWEEN ? AND ?
+        ORDER BY a.attendance_date ASC
+        `,
+        [
+          startDate,
+          reportEndDate,
+        ]
+      );
+    }
+
 
     // -------------------------------------------------
     // BUILD ATTENDANCE LOOKUP
@@ -552,56 +657,98 @@ router.get("/monthly-report", async (req, res) => {
     const attendanceMap = new Map();
 
     attendanceRows.forEach((record) => {
+
       const key =
         `${record.staff_id}_${record.attendance_date}`;
 
       attendanceMap.set(key, record);
     });
 
+
     // -------------------------------------------------
-    // COUNT SCHOOL WORKING DAYS
-    // TUESDAY TO SATURDAY
+    // BUILD WORKING DATES
+    //
+    // Tuesday = 2
+    // Wednesday = 3
+    // Thursday = 4
+    // Friday = 5
+    // Saturday = 6
+    //
+    // IMPORTANT:
+    // Future dates are NOT included.
     // -------------------------------------------------
     const workingDates = [];
 
-    const cursor = new Date(
-      reportYear,
-      reportMonth - 1,
-      1
-    );
+    if (reportEndDate) {
 
-    while (cursor.getMonth() === reportMonth - 1) {
-      const dayOfWeek = cursor.getDay();
+      const cursor = new Date(
+        reportYear,
+        reportMonth - 1,
+        1
+      );
 
-      // Tuesday = 2
-      // Wednesday = 3
-      // Thursday = 4
-      // Friday = 5
-      // Saturday = 6
-      if (dayOfWeek >= 2 && dayOfWeek <= 6) {
+      while (true) {
+
+        const currentYear =
+          cursor.getFullYear();
+
+        const currentMonth =
+          cursor.getMonth() + 1;
+
+        const currentDay =
+          cursor.getDate();
+
+
+        // Stop after selected month
+        if (
+          currentYear !== reportYear ||
+          currentMonth !== reportMonth
+        ) {
+          break;
+        }
+
+
         const dateString =
-          `${cursor.getFullYear()}-` +
-          `${String(cursor.getMonth() + 1).padStart(
-            2,
-            "0"
-          )}-` +
-          `${String(cursor.getDate()).padStart(
-            2,
-            "0"
-          )}`;
+          `${currentYear}-` +
+          `${String(currentMonth).padStart(2, "0")}-` +
+          `${String(currentDay).padStart(2, "0")}`;
 
-        workingDates.push(dateString);
+
+        // Stop at report end date
+        if (dateString > reportEndDate) {
+          break;
+        }
+
+
+        const dayOfWeek =
+          cursor.getDay();
+
+
+        // Tuesday through Saturday
+        if (
+          dayOfWeek >= 2 &&
+          dayOfWeek <= 6
+        ) {
+          workingDates.push(dateString);
+        }
+
+
+        cursor.setDate(
+          cursor.getDate() + 1
+        );
       }
-
-      cursor.setDate(cursor.getDate() + 1);
     }
 
-    const workingDays = workingDates.length;
+
+    const workingDays =
+      workingDates.length;
+
 
     // -------------------------------------------------
     // BUILD REPORT FOR EACH STAFF MEMBER
     // -------------------------------------------------
     const report = staffRows.map((staff) => {
+
       let presentDays = 0;
       let lateDays = 0;
       let absentDays = 0;
@@ -609,58 +756,103 @@ router.get("/monthly-report", async (req, res) => {
       let earlyDepartureDays = 0;
       let lateMinutesTotal = 0;
 
+
       workingDates.forEach((date) => {
+
         const key =
           `${staff.staff_id}_${date}`;
 
-        const record = attendanceMap.get(key);
+        const record =
+          attendanceMap.get(key);
 
-        // No attendance record
+
+        // ------------------------------------------------
+        // NO ATTENDANCE
+        // ------------------------------------------------
         if (!record) {
+
           absentDays++;
+
           return;
         }
 
-        // Sign-in exists
+
+        // ------------------------------------------------
+        // STAFF SIGNED IN
+        // ------------------------------------------------
         if (record.time_in) {
+
           presentDays++;
 
+
+          // Count late days
           if (record.status === "Late") {
             lateDays++;
           }
 
-          lateMinutesTotal += Number(
-            record.late_minutes || 0
-          );
+
+          // Add late minutes
+          lateMinutesTotal +=
+            Number(record.late_minutes || 0);
         }
 
-        // No sign-out
+
+        // ------------------------------------------------
+        // INCOMPLETE ATTENDANCE
+        // ------------------------------------------------
         if (!record.time_out) {
           incompleteDays++;
         }
 
-        // Sign-out before 5:00 PM
+
+        // ------------------------------------------------
+        // EARLY DEPARTURE
+        // ------------------------------------------------
         if (record.time_out) {
-          const timeParts = String(
-            record.time_out
-          ).split(":");
 
-          const hours = Number(
-            timeParts[0] || 0
-          );
+          const timeParts =
+            String(record.time_out)
+              .split(":");
 
-          const minutes = Number(
-            timeParts[1] || 0
-          );
+
+          const hours =
+            Number(timeParts[0] || 0);
+
+          const minutes =
+            Number(timeParts[1] || 0);
+
 
           const totalMinutes =
             hours * 60 + minutes;
 
-          if (totalMinutes < 17 * 60) {
+
+          const settings =
+            getAttendanceSettings();
+
+
+          const [
+            signOutHour,
+            signOutMinute,
+          ] =
+            settings.signOutTime
+              .split(":")
+              .map(Number);
+
+
+          const officialSignOutMinutes =
+            signOutHour * 60 +
+            signOutMinute;
+
+
+          if (
+            totalMinutes <
+            officialSignOutMinutes
+          ) {
             earlyDepartureDays++;
           }
         }
       });
+
 
       // ------------------------------------------------
       // ATTENDANCE PERCENTAGE
@@ -669,99 +861,158 @@ router.get("/monthly-report", async (req, res) => {
         workingDays > 0
           ? Number(
               (
-                (presentDays / workingDays) *
+                (presentDays /
+                  workingDays) *
                 100
               ).toFixed(1)
             )
           : 0;
 
-      return {
-        staff_id: staff.staff_id,
-        name: staff.name,
-        phone: staff.phone,
-        department_id: staff.department_id,
-        department: staff.department_name || "Unassigned",
-        status: staff.status,
 
-        working_days: workingDays,
-        present_days: presentDays,
-        late_days: lateDays,
-        absent_days: absentDays,
-        incomplete_days: incompleteDays,
+      // ------------------------------------------------
+      // STAFF REPORT
+      // ------------------------------------------------
+      return {
+
+        staff_id:
+          staff.staff_id,
+
+        name:
+          staff.name,
+
+        phone:
+          staff.phone,
+
+        department_id:
+          staff.department_id,
+
+        department:
+          staff.department_name ||
+          "Unassigned",
+
+        status:
+          staff.status,
+
+        working_days:
+          workingDays,
+
+        present_days:
+          presentDays,
+
+        late_days:
+          lateDays,
+
+        absent_days:
+          absentDays,
+
+        incomplete_days:
+          incompleteDays,
+
         early_departure_days:
           earlyDepartureDays,
-        late_minutes: lateMinutesTotal,
+
+        late_minutes:
+          lateMinutesTotal,
 
         attendance_percentage:
           attendancePercentage,
       };
     });
 
+
     // -------------------------------------------------
     // REPORT SUMMARY
     // -------------------------------------------------
     const summary = {
-      total_staff: report.length,
 
-      working_days: workingDays,
+      total_staff:
+        report.length,
 
-      total_present_days: report.reduce(
-        (total, staff) =>
-          total + staff.present_days,
-        0
-      ),
+      working_days:
+        workingDays,
 
-      total_late_days: report.reduce(
-        (total, staff) =>
-          total + staff.late_days,
-        0
-      ),
+      total_present_days:
+        report.reduce(
+          (total, staff) =>
+            total +
+            staff.present_days,
+          0
+        ),
 
-      total_absent_days: report.reduce(
-        (total, staff) =>
-          total + staff.absent_days,
-        0
-      ),
+      total_late_days:
+        report.reduce(
+          (total, staff) =>
+            total +
+            staff.late_days,
+          0
+        ),
 
-      total_incomplete_days: report.reduce(
-        (total, staff) =>
-          total + staff.incomplete_days,
-        0
-      ),
+      total_absent_days:
+        report.reduce(
+          (total, staff) =>
+            total +
+            staff.absent_days,
+          0
+        ),
 
-      total_early_departures: report.reduce(
-        (total, staff) =>
-          total + staff.early_departure_days,
-        0
-      ),
+      total_incomplete_days:
+        report.reduce(
+          (total, staff) =>
+            total +
+            staff.incomplete_days,
+          0
+        ),
 
-      total_late_minutes: report.reduce(
-        (total, staff) =>
-          total + staff.late_minutes,
-        0
-      ),
+      total_early_departures:
+        report.reduce(
+          (total, staff) =>
+            total +
+            staff.early_departure_days,
+          0
+        ),
+
+      total_late_minutes:
+        report.reduce(
+          (total, staff) =>
+            total +
+            staff.late_minutes,
+          0
+        ),
     };
+
 
     // -------------------------------------------------
     // RESPONSE
     // -------------------------------------------------
     return res.json({
+
       success: true,
 
       report_period: {
-        month: reportMonth,
-        year: reportYear,
-        start_date: startDate,
-        end_date: endDate,
+
+        month:
+          reportMonth,
+
+        year:
+          reportYear,
+
+        start_date:
+          startDate,
+
+        end_date:
+          reportEndDate,
       },
 
-      working_days: workingDays,
+      working_days:
+        workingDays,
 
       summary,
 
       report,
     });
+
   } catch (error) {
+
     console.error(
       "Monthly attendance report error:",
       error
@@ -774,5 +1025,6 @@ router.get("/monthly-report", async (req, res) => {
     });
   }
 });
+
 
 module.exports = router;
