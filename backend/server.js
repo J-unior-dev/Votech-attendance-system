@@ -15,33 +15,23 @@ const PORT = process.env.PORT || 5000;
 
 // =====================================================
 // CORS
-// Allow both local development and hosted frontend
 // =====================================================
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://navajowhite-crow-277801.hostingersite.com",
-];
+const corsOptions = {
+  origin: [
+    "http://localhost:5173",
+    "https://navajowhite-crow-277801.hostingersite.com",
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+};
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin
-      // (for example, direct server-to-server requests)
-      if (!origin) {
-        return callback(null, true);
-      }
+// Allow CORS for normal requests
+app.use(cors(corsOptions));
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error("Not allowed by CORS"));
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+// Explicitly handle browser preflight requests
+app.options(/.*/, cors(corsOptions));
 
 // Parse JSON requests
 app.use(express.json());
