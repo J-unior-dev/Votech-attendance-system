@@ -2,6 +2,13 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
+// =====================================================
+// CAMEROON TIMEZONE
+// =====================================================
+// Cameroon uses Africa/Douala (UTC+1).
+// This makes JavaScript Date methods use Cameroon time.
+process.env.TZ = "Africa/Douala";
+
 const db = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const staffRoutes = require("./routes/staffRoutes");
@@ -63,7 +70,10 @@ app.use(
   })
 );
 
-// Parse JSON requests
+// =====================================================
+// PARSE JSON REQUESTS
+// =====================================================
+
 app.use(express.json());
 
 // =====================================================
@@ -82,6 +92,22 @@ app.get("/api/attendance-test", (req, res) => {
   res.json({
     success: true,
     message: "Attendance API route is working!",
+  });
+});
+
+// =====================================================
+// TIMEZONE TEST ROUTE
+// =====================================================
+
+app.get("/api/time-test", (req, res) => {
+  const now = new Date();
+
+  res.json({
+    success: true,
+    timezone: process.env.TZ,
+    date: now.toLocaleDateString("en-CA"),
+    time: now.toLocaleTimeString("en-GB"),
+    iso: now.toISOString(),
   });
 });
 
@@ -163,4 +189,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Timezone: ${process.env.TZ}`);
 });
