@@ -1,5 +1,11 @@
 {
-  "reportingTime": "07:33",
+  "signInTimes": {
+    "Tuesday": "07:33",
+    "Wednesday": "07:43",
+    "Thursday": "07:43",
+    "Friday": "07:33",
+    "Saturday": "07:43"
+  },
   "signOutTime": "17:00",
   "workingDays": {
     "Tuesday": true,

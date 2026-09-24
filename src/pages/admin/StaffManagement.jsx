@@ -14,9 +14,11 @@ import {
   FiUserX,
   FiRefreshCw,
   FiAlertCircle,
+  FiClock,
 } from "react-icons/fi";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL;
 
 const EMPTY_FORM = {
   name: "",
@@ -24,33 +26,52 @@ const EMPTY_FORM = {
   department_id: "",
   username: "",
   password: "",
+  sign_out_time: "",
 };
 
 const ROWS_PER_PAGE = 5;
 
 function StaffManagement() {
-  const [departments, setDepartments] = useState([]);
-  const [staff, setStaff] = useState([]);
+  const [departments, setDepartments] =
+    useState([]);
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [staff, setStaff] =
+    useState([]);
 
-  const [showForm, setShowForm] = useState(false);
-  const [editingStaff, setEditingStaff] = useState(null);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [refreshing, setRefreshing] =
+    useState(false);
 
-  const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [showForm, setShowForm] =
+    useState(false);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [editingStaff, setEditingStaff] =
+    useState(null);
+
+  const [formData, setFormData] =
+    useState(EMPTY_FORM);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [currentPage, setCurrentPage] =
+    useState(1);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
 
   // =====================================================
   // LOAD STAFF
   // =====================================================
 
-  const loadStaff = async (isRefresh = false) => {
+  const loadStaff = async (
+    isRefresh = false
+  ) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -60,15 +81,18 @@ function StaffManagement() {
 
       setError("");
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/staff`
-      );
+      const response =
+        await fetch(
+          `${API_BASE_URL}/api/staff`
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Failed to load staff."
+          data.message ||
+            "Failed to load staff."
         );
       }
 
@@ -80,7 +104,10 @@ function StaffManagement() {
           : []
       );
     } catch (err) {
-      console.error("Staff loading error:", err);
+      console.error(
+        "Staff loading error:",
+        err
+      );
 
       setError(
         "Unable to load staff. Please make sure the backend is running."
@@ -95,36 +122,48 @@ function StaffManagement() {
   // LOAD DEPARTMENTS
   // =====================================================
 
-  const loadDepartments = async () => {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/departments`
-      );
+  const loadDepartments =
+    async () => {
+      try {
+        const response =
+          await fetch(
+            `${API_BASE_URL}/api/departments`
+          );
 
-      const data = await response.json();
+        const data =
+          await response.json();
 
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to load departments."
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Failed to load departments."
+          );
+        }
+
+        setDepartments(
+          Array.isArray(
+            data.departments
+          )
+            ? data.departments
+            : Array.isArray(data)
+            ? data
+            : []
+        );
+      } catch (err) {
+        console.error(
+          "Department loading error:",
+          err
+        );
+
+        setError(
+          "Unable to load departments."
         );
       }
+    };
 
-      setDepartments(
-        Array.isArray(data.departments)
-          ? data.departments
-          : Array.isArray(data)
-          ? data
-          : []
-      );
-    } catch (err) {
-      console.error(
-        "Department loading error:",
-        err
-      );
-
-      setError("Unable to load departments.");
-    }
-  };
+  // =====================================================
+  // INITIAL LOAD
+  // =====================================================
 
   useEffect(() => {
     loadStaff();
@@ -132,47 +171,75 @@ function StaffManagement() {
   }, []);
 
   // =====================================================
-  // FORM
+  // FORM CHANGE
   // =====================================================
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const {
+      name,
+      value,
+    } = e.target;
 
-    setFormData((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    setFormData(
+      (previous) => ({
+        ...previous,
+        [name]: value,
+      })
+    );
   };
 
   // =====================================================
-  // OPEN ADD
+  // OPEN ADD FORM
   // =====================================================
 
   const openAddForm = () => {
     setEditingStaff(null);
-    setFormData(EMPTY_FORM);
+
+    setFormData(
+      EMPTY_FORM
+    );
+
     setMessage("");
     setError("");
+
     setShowForm(true);
   };
 
   // =====================================================
-  // OPEN EDIT
+  // OPEN EDIT FORM
   // =====================================================
 
-  const openEditForm = (member) => {
+  const openEditForm = (
+    member
+  ) => {
     setEditingStaff(member);
 
     setFormData({
-      name: member.name || "",
-      phone: member.phone || "",
-      department_id: member.department_id || "",
-      username: member.username || "",
+      name:
+        member.name || "",
+
+      phone:
+        member.phone || "",
+
+      department_id:
+        member.department_id || "",
+
+      username:
+        member.username || "",
+
       password: "",
+
+      sign_out_time:
+        member.sign_out_time
+          ? String(
+              member.sign_out_time
+            ).substring(0, 5)
+          : "",
     });
 
     setMessage("");
     setError("");
+
     setShowForm(true);
   };
 
@@ -183,247 +250,313 @@ function StaffManagement() {
   const closeForm = () => {
     setShowForm(false);
     setEditingStaff(null);
-    setFormData(EMPTY_FORM);
+    setFormData(
+      EMPTY_FORM
+    );
   };
 
   // =====================================================
   // REGISTER / UPDATE
   // =====================================================
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit =
+    async (e) => {
+      e.preventDefault();
 
-    setMessage("");
-    setError("");
+      setMessage("");
+      setError("");
 
-    try {
-      const url = editingStaff
-        ? `${API_BASE_URL}/api/staff/${editingStaff.staff_id}`
-        : `${API_BASE_URL}/api/staff`;
+      try {
+        const url =
+          editingStaff
+            ? `${API_BASE_URL}/api/staff/${editingStaff.staff_id}`
+            : `${API_BASE_URL}/api/staff`;
 
-      const method = editingStaff ? "PUT" : "POST";
+        const method =
+          editingStaff
+            ? "PUT"
+            : "POST";
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
+        const response =
+          await fetch(url, {
+            method,
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify(
+              formData
+            ),
+          });
 
-      const data = await response.json();
+        const data =
+          await response.json();
 
-      if (!response.ok) {
-        setError(
-          data.message ||
-            (editingStaff
-              ? "Failed to update staff."
-              : "Failed to register staff.")
+        if (!response.ok) {
+          setError(
+            data.message ||
+              (editingStaff
+                ? "Failed to update staff."
+                : "Failed to register staff.")
+          );
+
+          return;
+        }
+
+        setMessage(
+          editingStaff
+            ? "Staff details updated successfully."
+            : "Staff registered successfully."
         );
 
-        return;
+        closeForm();
+
+        await loadStaff();
+      } catch (err) {
+        console.error(
+          "Save staff error:",
+          err
+        );
+
+        setError(
+          "Unable to connect to the server."
+        );
       }
-
-      setMessage(
-        editingStaff
-          ? "Staff details updated successfully."
-          : "Staff registered successfully."
-      );
-
-      closeForm();
-
-      await loadStaff();
-    } catch (err) {
-      console.error("Save staff error:", err);
-
-      setError(
-        "Unable to connect to the server."
-      );
-    }
-  };
+    };
 
   // =====================================================
   // ACTIVATE / DEACTIVATE
   // =====================================================
 
-  const handleStatusChange = async (member) => {
-    const newStatus =
-      member.status === "Active"
-        ? "Inactive"
-        : "Active";
+  const handleStatusChange =
+    async (member) => {
+      const newStatus =
+        member.status ===
+        "Active"
+          ? "Inactive"
+          : "Active";
 
-    const actionText =
-      newStatus === "Active"
-        ? "activate"
-        : "deactivate";
+      const actionText =
+        newStatus === "Active"
+          ? "activate"
+          : "deactivate";
 
-    const confirmed = window.confirm(
-      `Are you sure you want to ${actionText} ${member.name}?`
-    );
-
-    if (!confirmed) return;
-
-    setMessage("");
-    setError("");
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/staff/${member.staff_id}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            status: newStatus,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(
-          data.message ||
-            "Failed to change staff status."
+      const confirmed =
+        window.confirm(
+          `Are you sure you want to ${actionText} ${member.name}?`
         );
 
+      if (!confirmed)
         return;
+
+      setMessage("");
+      setError("");
+
+      try {
+        const response =
+          await fetch(
+            `${API_BASE_URL}/api/staff/${member.staff_id}/status`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                status:
+                  newStatus,
+              }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          setError(
+            data.message ||
+              "Failed to change staff status."
+          );
+
+          return;
+        }
+
+        setMessage(
+          data.message ||
+            "Staff status updated successfully."
+        );
+
+        await loadStaff();
+      } catch (err) {
+        console.error(
+          "Status change error:",
+          err
+        );
+
+        setError(
+          "Unable to connect to the server."
+        );
       }
-
-      setMessage(
-        data.message ||
-          "Staff status updated successfully."
-      );
-
-      await loadStaff();
-    } catch (err) {
-      console.error(
-        "Status change error:",
-        err
-      );
-
-      setError(
-        "Unable to connect to the server."
-      );
-    }
-  };
+    };
 
   // =====================================================
   // DELETE
   // =====================================================
 
-  const handleDelete = async (member) => {
-    const confirmed = window.confirm(
-      `Delete ${member.name} permanently?\n\nThis action cannot be undone.`
-    );
-
-    if (!confirmed) return;
-
-    setMessage("");
-    setError("");
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/staff/${member.staff_id}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(
-          data.message ||
-            "Failed to delete staff."
+  const handleDelete =
+    async (member) => {
+      const confirmed =
+        window.confirm(
+          `Delete ${member.name} permanently?\n\nThis action cannot be undone.`
         );
 
+      if (!confirmed)
         return;
+
+      setMessage("");
+      setError("");
+
+      try {
+        const response =
+          await fetch(
+            `${API_BASE_URL}/api/staff/${member.staff_id}`,
+            {
+              method: "DELETE",
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          setError(
+            data.message ||
+              "Failed to delete staff."
+          );
+
+          return;
+        }
+
+        setMessage(
+          data.message ||
+            "Staff member deleted successfully."
+        );
+
+        await loadStaff();
+      } catch (err) {
+        console.error(
+          "Delete staff error:",
+          err
+        );
+
+        setError(
+          "Unable to connect to the server."
+        );
       }
-
-      setMessage(
-        data.message ||
-          "Staff member deleted successfully."
-      );
-
-      await loadStaff();
-    } catch (err) {
-      console.error(
-        "Delete staff error:",
-        err
-      );
-
-      setError(
-        "Unable to connect to the server."
-      );
-    }
-  };
+    };
 
   // =====================================================
   // SEARCH
   // =====================================================
 
-  const filteredStaff = useMemo(() => {
-    const text = search.toLowerCase().trim();
+  const filteredStaff =
+    useMemo(() => {
+      const text =
+        search
+          .toLowerCase()
+          .trim();
 
-    if (!text) return staff;
+      if (!text)
+        return staff;
 
-    return staff.filter((member) => {
-      return (
-        member.staff_id
-          ?.toLowerCase()
-          .includes(text) ||
-        member.name
-          ?.toLowerCase()
-          .includes(text) ||
-        member.department_name
-          ?.toLowerCase()
-          .includes(text) ||
-        member.phone
-          ?.toLowerCase()
-          .includes(text) ||
-        member.username
-          ?.toLowerCase()
-          .includes(text)
+      return staff.filter(
+        (member) => {
+          return (
+            String(
+              member.staff_id || ""
+            )
+              .toLowerCase()
+              .includes(text) ||
+
+            String(
+              member.name || ""
+            )
+              .toLowerCase()
+              .includes(text) ||
+
+            String(
+              member.department_name ||
+                ""
+            )
+              .toLowerCase()
+              .includes(text) ||
+
+            String(
+              member.phone || ""
+            )
+              .toLowerCase()
+              .includes(text) ||
+
+            String(
+              member.username || ""
+            )
+              .toLowerCase()
+              .includes(text)
+          );
+        }
       );
-    });
-  }, [staff, search]);
+    }, [staff, search]);
 
   // =====================================================
   // PAGINATION
   // =====================================================
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(
-      filteredStaff.length / ROWS_PER_PAGE
-    )
-  );
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        filteredStaff.length /
+          ROWS_PER_PAGE
+      )
+    );
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
+    if (
+      currentPage >
+      totalPages
+    ) {
+      setCurrentPage(
+        totalPages
+      );
     }
-  }, [currentPage, totalPages]);
+  }, [
+    currentPage,
+    totalPages,
+  ]);
 
   const startIndex =
-    (currentPage - 1) * ROWS_PER_PAGE;
+    (currentPage - 1) *
+    ROWS_PER_PAGE;
 
-  const paginatedStaff = filteredStaff.slice(
-    startIndex,
-    startIndex + ROWS_PER_PAGE
-  );
+  const paginatedStaff =
+    filteredStaff.slice(
+      startIndex,
+      startIndex +
+        ROWS_PER_PAGE
+    );
 
   const firstShown =
-    filteredStaff.length === 0
+    filteredStaff.length ===
+    0
       ? 0
       : startIndex + 1;
 
-  const lastShown = Math.min(
-    startIndex + ROWS_PER_PAGE,
-    filteredStaff.length
-  );
+  const lastShown =
+    Math.min(
+      startIndex +
+        ROWS_PER_PAGE,
+      filteredStaff.length
+    );
 
   const pageNumbers = [];
 
@@ -432,7 +565,9 @@ function StaffManagement() {
     page <= totalPages;
     page++
   ) {
-    pageNumbers.push(page);
+    pageNumbers.push(
+      page
+    );
   }
 
   // =====================================================
@@ -455,16 +590,19 @@ function StaffManagement() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Manage registered staff members.
+              Manage registered staff members and their attendance schedules.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={openAddForm}
+            onClick={
+              openAddForm
+            }
             className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
           >
             <FiPlus className="h-4 w-4" />
+
             Add Staff
           </button>
 
@@ -477,6 +615,7 @@ function StaffManagement() {
         {message && (
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
             <FiUserCheck className="shrink-0" />
+
             {message}
           </div>
         )}
@@ -484,6 +623,7 @@ function StaffManagement() {
         {error && (
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <FiAlertCircle className="shrink-0" />
+
             {error}
           </div>
         )}
@@ -505,9 +645,17 @@ function StaffManagement() {
               <input
                 type="text"
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setCurrentPage(1);
+                onChange={(
+                  e
+                ) => {
+                  setSearch(
+                    e.target
+                      .value
+                  );
+
+                  setCurrentPage(
+                    1
+                  );
                 }}
                 placeholder="Search staff..."
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
@@ -517,8 +665,14 @@ function StaffManagement() {
 
             <button
               type="button"
-              onClick={() => loadStaff(true)}
-              disabled={refreshing}
+              onClick={() =>
+                loadStaff(
+                  true
+                )
+              }
+              disabled={
+                refreshing
+              }
               className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-blue-600 disabled:opacity-50"
               title="Refresh"
             >
@@ -541,10 +695,12 @@ function StaffManagement() {
               <div className="flex h-72 items-center justify-center text-sm text-slate-500">
                 <div className="flex items-center gap-3">
                   <FiRefreshCw className="animate-spin" />
+
                   Loading staff...
                 </div>
               </div>
-            ) : paginatedStaff.length === 0 ? (
+            ) : paginatedStaff.length ===
+              0 ? (
               <div className="flex h-72 flex-col items-center justify-center text-center">
 
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
@@ -561,7 +717,7 @@ function StaffManagement() {
 
               </div>
             ) : (
-              <table className="w-full min-w-[760px]">
+              <table className="w-full min-w-[980px]">
 
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50">
@@ -579,6 +735,10 @@ function StaffManagement() {
                     </th>
 
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700">
+                      Sign-Out
+                    </th>
+
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-700">
                       Status
                     </th>
 
@@ -592,7 +752,9 @@ function StaffManagement() {
                 <tbody>
 
                   {paginatedStaff.map(
-                    (member) => (
+                    (
+                      member
+                    ) => (
                       <tr
                         key={
                           member.staff_id
@@ -601,7 +763,9 @@ function StaffManagement() {
                       >
 
                         <td className="px-6 py-4 text-sm font-medium text-slate-600">
-                          {member.staff_id}
+                          {
+                            member.staff_id
+                          }
                         </td>
 
                         <td className="px-6 py-4">
@@ -610,13 +774,17 @@ function StaffManagement() {
 
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">
                               {member.name
-                                ?.charAt(0)
+                                ?.charAt(
+                                  0
+                                )
                                 ?.toUpperCase() ||
                                 "S"}
                             </div>
 
                             <span className="text-sm font-semibold text-slate-800">
-                              {member.name}
+                              {
+                                member.name
+                              }
                             </span>
 
                           </div>
@@ -624,8 +792,37 @@ function StaffManagement() {
                         </td>
 
                         <td className="px-6 py-4 text-sm text-slate-600">
-                          {member.department_name ||
-                            "—"}
+                          {
+                            member.department_name ||
+                            "—"
+                          }
+                        </td>
+
+                        <td className="px-6 py-4">
+
+                          <div className="flex items-center gap-2 text-sm">
+
+                            <FiClock className="h-4 w-4 text-slate-400" />
+
+                            <span className="font-semibold text-slate-700">
+                              {member.sign_out_time
+                                ? String(
+                                    member.sign_out_time
+                                  ).substring(
+                                    0,
+                                    5
+                                  )
+                                : "17:00"}
+                            </span>
+
+                            {!member.sign_out_time && (
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                Default
+                              </span>
+                            )}
+
+                          </div>
+
                         </td>
 
                         <td className="px-6 py-4">
@@ -638,7 +835,9 @@ function StaffManagement() {
                                 : "text-red-500"
                             }`}
                           >
-                            {member.status}
+                            {
+                              member.status
+                            }
                           </span>
 
                         </td>
@@ -719,23 +918,34 @@ function StaffManagement() {
           {/* PAGINATION */}
 
           {!loading &&
-            filteredStaff.length > 0 && (
+            filteredStaff.length >
+              0 && (
               <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
 
                 <p className="text-sm text-slate-500">
+
                   Showing{" "}
+
                   <span className="font-medium text-slate-700">
                     {firstShown}
                   </span>{" "}
+
                   to{" "}
+
                   <span className="font-medium text-slate-700">
                     {lastShown}
                   </span>{" "}
+
                   of{" "}
+
                   <span className="font-medium text-slate-700">
-                    {filteredStaff.length}
+                    {
+                      filteredStaff.length
+                    }
                   </span>{" "}
+
                   staff
+
                 </p>
 
                 <div className="flex items-center gap-1">
@@ -743,14 +953,18 @@ function StaffManagement() {
                   <button
                     type="button"
                     disabled={
-                      currentPage === 1
+                      currentPage ===
+                      1
                     }
                     onClick={() =>
                       setCurrentPage(
-                        (page) =>
+                        (
+                          page
+                        ) =>
                           Math.max(
                             1,
-                            page - 1
+                            page -
+                              1
                           )
                       )
                     }
@@ -760,9 +974,13 @@ function StaffManagement() {
                   </button>
 
                   {pageNumbers.map(
-                    (page) => (
+                    (
+                      page
+                    ) => (
                       <button
-                        key={page}
+                        key={
+                          page
+                        }
                         type="button"
                         onClick={() =>
                           setCurrentPage(
@@ -776,7 +994,9 @@ function StaffManagement() {
                             : "text-slate-500 hover:bg-slate-100"
                         }`}
                       >
-                        {page}
+                        {
+                          page
+                        }
                       </button>
                     )
                   )}
@@ -789,10 +1009,13 @@ function StaffManagement() {
                     }
                     onClick={() =>
                       setCurrentPage(
-                        (page) =>
+                        (
+                          page
+                        ) =>
                           Math.min(
                             totalPages,
-                            page + 1
+                            page +
+                              1
                           )
                       )
                     }
@@ -819,15 +1042,14 @@ function StaffManagement() {
 
           <div className="w-full max-w-[620px] max-h-[92vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl">
 
-            {/* =================================================
-                DIALOG HEADER
-            ================================================= */}
+            {/* HEADER */}
 
             <div className="px-8 pb-2 pt-8 sm:px-10">
 
               <div className="flex items-start justify-between">
 
                 <div>
+
                   <h2 className="text-[25px] font-bold tracking-tight text-slate-900">
                     {editingStaff
                       ? "Edit Staff"
@@ -836,14 +1058,17 @@ function StaffManagement() {
 
                   <p className="mt-1.5 text-sm text-slate-500">
                     {editingStaff
-                      ? "Update staff account information."
+                      ? "Update staff account information and attendance schedule."
                       : "Enter the staff member's information below."}
                   </p>
+
                 </div>
 
                 <button
                   type="button"
-                  onClick={closeForm}
+                  onClick={
+                    closeForm
+                  }
                   className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 >
                   <FiX className="h-5 w-5" />
@@ -853,12 +1078,12 @@ function StaffManagement() {
 
             </div>
 
-            {/* =================================================
-                FORM
-            ================================================= */}
+            {/* FORM */}
 
             <form
-              onSubmit={handleSubmit}
+              onSubmit={
+                handleSubmit
+              }
               className="px-8 pb-8 pt-5 sm:px-10"
             >
 
@@ -867,6 +1092,7 @@ function StaffManagement() {
                 {/* FULL NAME */}
 
                 <div>
+
                   <label className="mb-2 block text-[15px] font-semibold text-slate-800">
                     Full Name
                   </label>
@@ -874,17 +1100,23 @@ function StaffManagement() {
                   <input
                     type="text"
                     name="name"
-                    value={formData.name}
-                    onChange={handleChange}
+                    value={
+                      formData.name
+                    }
+                    onChange={
+                      handleChange
+                    }
                     required
                     placeholder="Enter full name"
                     className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-[15px] text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                   />
+
                 </div>
 
                 {/* DEPARTMENT */}
 
                 <div>
+
                   <label className="mb-2 block text-[15px] font-semibold text-slate-800">
                     Department
                   </label>
@@ -894,16 +1126,21 @@ function StaffManagement() {
                     value={
                       formData.department_id
                     }
-                    onChange={handleChange}
+                    onChange={
+                      handleChange
+                    }
                     required
                     className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-[15px] text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                   >
+
                     <option value="">
                       Select Department
                     </option>
 
                     {departments.map(
-                      (department) => (
+                      (
+                        department
+                      ) => (
                         <option
                           key={
                             department.department_id
@@ -918,12 +1155,15 @@ function StaffManagement() {
                         </option>
                       )
                     )}
+
                   </select>
+
                 </div>
 
                 {/* PHONE */}
 
                 <div>
+
                   <label className="mb-2 block text-[15px] font-semibold text-slate-800">
                     Phone Number
                   </label>
@@ -931,17 +1171,23 @@ function StaffManagement() {
                   <input
                     type="text"
                     name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
+                    value={
+                      formData.phone
+                    }
+                    onChange={
+                      handleChange
+                    }
                     required
                     placeholder="Enter phone number"
                     className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-[15px] text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                   />
+
                 </div>
 
                 {/* USERNAME */}
 
                 <div>
+
                   <label className="mb-2 block text-[15px] font-semibold text-slate-800">
                     Username
                   </label>
@@ -949,17 +1195,23 @@ function StaffManagement() {
                   <input
                     type="text"
                     name="username"
-                    value={formData.username}
-                    onChange={handleChange}
+                    value={
+                      formData.username
+                    }
+                    onChange={
+                      handleChange
+                    }
                     required
                     placeholder="Enter username"
                     className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-[15px] text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                   />
+
                 </div>
 
                 {/* PASSWORD */}
 
                 <div>
+
                   <label className="mb-2 block text-[15px] font-semibold text-slate-800">
                     Password
                   </label>
@@ -967,9 +1219,15 @@ function StaffManagement() {
                   <input
                     type="password"
                     name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required={!editingStaff}
+                    value={
+                      formData.password
+                    }
+                    onChange={
+                      handleChange
+                    }
+                    required={
+                      !editingStaff
+                    }
                     placeholder={
                       editingStaff
                         ? "Leave blank to keep current password"
@@ -980,23 +1238,66 @@ function StaffManagement() {
 
                   {editingStaff && (
                     <p className="mt-1.5 text-xs text-slate-400">
-                      Leave blank to keep the current
-                      password.
+                      Leave blank to keep the current password.
                     </p>
                   )}
+
+                </div>
+
+                {/* SIGN-OUT TIME */}
+
+                <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+
+                  <div className="flex items-start gap-3">
+
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                      <FiClock className="h-5 w-5" />
+                    </div>
+
+                    <div className="flex-1">
+
+                      <label className="mb-1 block text-[15px] font-semibold text-slate-800">
+                        Individual Sign-Out Time
+                      </label>
+
+                      <p className="mb-3 text-xs leading-5 text-slate-500">
+                        Leave this empty to use the system default sign-out time of 5:00 PM.
+                        Set a time here for part-time teachers or staff with a different schedule.
+                      </p>
+
+                      <input
+                        type="time"
+                        name="sign_out_time"
+                        value={
+                          formData.sign_out_time
+                        }
+                        onChange={
+                          handleChange
+                        }
+                        className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-[15px] font-semibold text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                      />
+
+                      <p className="mt-2 text-[11px] text-blue-600">
+                        Example: 13:00 for a teacher who finishes at 1:00 PM.
+                      </p>
+
+                    </div>
+
+                  </div>
+
                 </div>
 
               </div>
 
-              {/* =================================================
-                  BUTTONS
-              ================================================= */}
+              {/* BUTTONS */}
 
               <div className="mt-8 flex justify-end gap-3">
 
                 <button
                   type="button"
-                  onClick={closeForm}
+                  onClick={
+                    closeForm
+                  }
                   className="h-11 min-w-[110px] rounded-lg border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
                   Cancel
@@ -1006,9 +1307,7 @@ function StaffManagement() {
                   type="submit"
                   className="h-11 min-w-[110px] rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
                 >
-                  {editingStaff
-                    ? "Save"
-                    : "Save"}
+                  Save
                 </button>
 
               </div>

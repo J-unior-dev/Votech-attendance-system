@@ -8,6 +8,9 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
 
+  // Cameroon is UTC+1
+  timezone: "+01:00",
+
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

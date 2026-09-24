@@ -12,6 +12,20 @@ function generateToken() {
 }
 
 // =====================================================
+// GET CURRENT CAMEROON DATE
+// Format: YYYY-MM-DD
+// =====================================================
+function getCameroonDate() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+// =====================================================
 // VALIDATE DATE FORMAT
 // =====================================================
 function isValidDate(date) {
@@ -22,6 +36,12 @@ function isValidDate(date) {
 // GET TUESDAY - SATURDAY
 // =====================================================
 function getSchoolWeek(weekStart) {
+  if (!isValidDate(weekStart)) {
+    return [];
+  }
+
+  // Create date using local server timezone.
+  // server.js sets TZ to Africa/Douala.
   const start = new Date(`${weekStart}T00:00:00`);
 
   if (isNaN(start.getTime())) {
@@ -60,9 +80,12 @@ router.post("/generate-weekly", async (req, res) => {
     console.log("====================================");
     console.log("QR GENERATION REQUEST");
     console.log("week_start:", week_start);
+    console.log("Cameroon date:", getCameroonDate());
     console.log("====================================");
 
-    // Validate week start
+    // =================================================
+    // VALIDATE WEEK START
+    // =================================================
     if (!week_start || !isValidDate(week_start)) {
       return res.status(400).json({
         success: false,
@@ -70,7 +93,9 @@ router.post("/generate-weekly", async (req, res) => {
       });
     }
 
-    // Get Tuesday-Saturday
+    // =================================================
+    // GET TUESDAY-SATURDAY
+    // =================================================
     const dates = getSchoolWeek(week_start);
 
     if (dates.length !== 5) {
@@ -88,7 +113,7 @@ router.post("/generate-weekly", async (req, res) => {
     // CREATE / GET QR FOR EACH SCHOOL DAY
     // =================================================
     for (const tokenDate of dates) {
-      // Check whether QR already exists
+      // Check whether QR already exists for this date
       const [existingRows] = await db.query(
         `
         SELECT
@@ -104,13 +129,17 @@ router.post("/generate-weekly", async (req, res) => {
         [tokenDate]
       );
 
-      // If QR already exists, keep it
+      // =================================================
+      // IF QR ALREADY EXISTS, KEEP IT
+      // =================================================
       if (existingRows.length > 0) {
         tokens.push(existingRows[0]);
         continue;
       }
 
-      // Generate new secure token
+      // =================================================
+      // GENERATE NEW SECURE TOKEN
+      // =================================================
       const token = generateToken();
 
       const [result] = await db.query(
@@ -162,8 +191,12 @@ router.get("/weekly", async (req, res) => {
     console.log("====================================");
     console.log("LOAD QR REQUEST");
     console.log("week_start:", week_start);
+    console.log("Cameroon date:", getCameroonDate());
     console.log("====================================");
 
+    // =================================================
+    // VALIDATE DATE
+    // =================================================
     if (!week_start || !isValidDate(week_start)) {
       return res.status(400).json({
         success: false,
@@ -171,6 +204,9 @@ router.get("/weekly", async (req, res) => {
       });
     }
 
+    // =================================================
+    // GET TUESDAY-SATURDAY
+    // =================================================
     const dates = getSchoolWeek(week_start);
 
     if (dates.length !== 5) {
@@ -183,13 +219,15 @@ router.get("/weekly", async (req, res) => {
     const startDate = dates[0];
     const endDate = dates[4];
 
+    // =================================================
+    // GET QR RECORDS
+    // =================================================
     const [rows] = await db.query(
       `
       SELECT
         token_id,
         token,
-        DATE_FORMAT(token_date,
-        '%Y-%m-%d') AS token_date,
+        DATE_FORMAT(token_date, '%Y-%m-%d') AS token_date,
         created_at,
         status
       FROM qr_tokens
