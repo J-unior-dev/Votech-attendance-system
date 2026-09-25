@@ -26,9 +26,15 @@ function StaffDashboard() {
   const [qrToken, setQrToken] = useState("");
   const [scanning, setScanning] = useState(false);
 
-  const staff = JSON.parse(localStorage.getItem("staff") || "{}");
+  const staff = JSON.parse(
+    localStorage.getItem("staff") || "{}"
+  );
 
   const today = new Date();
+
+  // =====================================================
+  // CURRENT DATE
+  // =====================================================
 
   const formattedDate = today.toLocaleDateString("en-GB", {
     weekday: "long",
@@ -39,10 +45,86 @@ function StaffDashboard() {
 
   const shortDate = today.toLocaleDateString("en-GB");
 
+  // =====================================================
+  // CURRENT DAY
+  // =====================================================
+
+  const dayNames = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  const currentDay = dayNames[today.getDay()];
+
+  // =====================================================
+  // SIGN-IN TIMES
+  // These match the backend settings.json defaults.
+  //
+  // IMPORTANT:
+  // The backend remains the final authority for lateness.
+  // These values are only displayed on the dashboard.
+  // =====================================================
+
+  const signInTimes = {
+    Tuesday: "07:33",
+    Wednesday: "07:43",
+    Thursday: "07:43",
+    Friday: "07:33",
+    Saturday: "07:43",
+  };
+
+  const officialSignInTime =
+    signInTimes[currentDay] || "07:33";
+
+  // =====================================================
+  // INDIVIDUAL STAFF SIGN-OUT TIME
+  //
+  // If a staff member has an individual sign-out time,
+  // use it. Otherwise use the system default of 17:00.
+  // =====================================================
+
+  const officialSignOutTime =
+    staff.sign_out_time || "17:00";
+
+  // =====================================================
+  // FORMAT TIME FOR DISPLAY
+  // Converts 07:33 -> 7:33 AM
+  // =====================================================
+
+  const formatTime = (time) => {
+    if (!time) return "";
+
+    const [hoursString, minutesString] =
+      String(time).split(":");
+
+    let hours = Number(hoursString);
+    const minutes = minutesString || "00";
+
+    const suffix = hours >= 12 ? "PM" : "AM";
+
+    hours = hours % 12;
+
+    if (hours === 0) {
+      hours = 12;
+    }
+
+    return `${hours}:${minutes} ${suffix}`;
+  };
+
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+
   const handleLogout = () => {
     localStorage.removeItem("staff");
     localStorage.removeItem("staffToken");
     localStorage.removeItem("rememberMe");
+    localStorage.removeItem("qrToken");
 
     window.location.href = "/login";
   };
@@ -50,6 +132,7 @@ function StaffDashboard() {
   // =====================================================
   // START QR SCANNER
   // =====================================================
+
   const startScanner = async () => {
     setMessage("");
     setError("");
@@ -65,20 +148,37 @@ function StaffDashboard() {
           { facingMode: "environment" },
           {
             fps: 10,
-            qrbox: { width: 250, height: 250 },
+            qrbox: {
+              width: 250,
+              height: 250,
+            },
           },
           async (decodedText) => {
-            console.log("QR TOKEN SCANNED:", decodedText);
+            console.log(
+              "QR TOKEN SCANNED:",
+              decodedText
+            );
 
             setQrToken(decodedText);
-            localStorage.setItem("qrToken", decodedText);
+
+            localStorage.setItem(
+              "qrToken",
+              decodedText
+            );
 
             setMessage(
               "QR code scanned successfully. You can now sign in or sign out."
             );
 
-            await scanner.stop();
-            scanner.clear();
+            try {
+              await scanner.stop();
+              scanner.clear();
+            } catch (scannerError) {
+              console.log(
+                "Scanner cleanup:",
+                scannerError
+              );
+            }
 
             setScanning(false);
             setScannerOpen(false);
@@ -88,7 +188,10 @@ function StaffDashboard() {
           }
         );
       } catch (err) {
-        console.error("QR scanner error:", err);
+        console.error(
+          "QR scanner error:",
+          err
+        );
 
         setScanning(false);
         setScannerOpen(false);
@@ -103,6 +206,7 @@ function StaffDashboard() {
   // =====================================================
   // CLOSE QR SCANNER
   // =====================================================
+
   const closeScanner = () => {
     setScannerOpen(false);
     setScanning(false);
@@ -111,36 +215,59 @@ function StaffDashboard() {
   // =====================================================
   // ATTENDANCE
   // =====================================================
-  const handleAttendance = async (selectedAction) => {
+
+  const handleAttendance = async (
+    selectedAction
+  ) => {
     setAction(selectedAction);
     setMessage("");
     setError("");
     setLoading(true);
 
     try {
-      const token = qrToken || localStorage.getItem("qrToken");
+      const token =
+        qrToken ||
+        localStorage.getItem("qrToken");
+
+      // -------------------------------------------------
+      // CHECK QR
+      // -------------------------------------------------
 
       if (!token) {
-        setError("Please scan today's QR code first.");
+        setError(
+          "Please scan today's QR code first."
+        );
+
         setLoading(false);
         return;
       }
+
+      // -------------------------------------------------
+      // CHECK STAFF
+      // -------------------------------------------------
 
       if (!staff.staff_id) {
         setError(
           "Staff information could not be found. Please log in again."
         );
+
         setLoading(false);
         return;
       }
 
+      // -------------------------------------------------
+      // SEND ATTENDANCE
+      // -------------------------------------------------
+
       const response = await fetch(
-  `${import.meta.env.VITE_API_URL}/api/attendance/scan`,
+        `${import.meta.env.VITE_API_URL}/api/attendance/scan`,
         {
           method: "POST",
+
           headers: {
             "Content-Type": "application/json",
           },
+
           body: JSON.stringify({
             staff_id: staff.staff_id,
             token: token,
@@ -149,19 +276,66 @@ function StaffDashboard() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
+
+      // -------------------------------------------------
+      // SERVER ERROR
+      // -------------------------------------------------
 
       if (!response.ok) {
-        setError(data.message || "Attendance could not be recorded.");
+        setError(
+          data.message ||
+            "Attendance could not be recorded."
+        );
+
         return;
       }
 
-      setMessage(data.message);
+      // -------------------------------------------------
+      // SUCCESS
+      // -------------------------------------------------
+
+      setMessage(
+        data.message ||
+          "Attendance recorded successfully."
+      );
+
+      // -------------------------------------------------
+      // UPDATE STAFF SIGN-OUT TIME IF SERVER RETURNS IT
+      // -------------------------------------------------
+
+      if (
+        data.attendance?.official_sign_out
+      ) {
+        const updatedStaff = {
+          ...staff,
+          sign_out_time:
+            data.attendance
+              .official_sign_out,
+        };
+
+        localStorage.setItem(
+          "staff",
+          JSON.stringify(
+            updatedStaff
+          )
+        );
+      }
+
+      // -------------------------------------------------
+      // AFTER SUCCESSFUL ATTENDANCE,
+      // KEEP QR TOKEN AVAILABLE.
+      // -------------------------------------------------
+
     } catch (err) {
-      console.error(err);
+      console.error(
+        "Attendance request error:",
+        err
+      );
 
       setError(
-        "Unable to connect to the attendance server. Please make sure the backend is running."
+        "Unable to connect to the attendance server. Please try again."
       );
     } finally {
       setLoading(false);
@@ -170,16 +344,25 @@ function StaffDashboard() {
 
   return (
     <div className="min-h-screen bg-[#f5f7fb]">
+
       {/* =====================================================
           HEADER
       ===================================================== */}
+
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+
           {/* BRAND */}
+
           <div className="flex min-w-0 items-center gap-3">
-            <SchoolLogo className="h-11 w-11 shrink-0 sm:h-12 sm:w-12" />
+
+            <SchoolLogo
+              className="h-11 w-11 shrink-0 sm:h-12 sm:w-12"
+            />
 
             <div className="min-w-0">
+
               <p className="truncate text-base font-bold tracking-wide text-slate-900 sm:text-lg">
                 VOTECH S7
               </p>
@@ -187,23 +370,36 @@ function StaffDashboard() {
               <p className="truncate text-[10px] font-medium text-slate-500 sm:text-xs">
                 Staff Attendance System
               </p>
+
             </div>
+
           </div>
 
           {/* STAFF + LOGOUT */}
+
           <div className="flex items-center gap-2 sm:gap-4">
+
             <div className="hidden text-right sm:block">
+
               <p className="text-sm font-semibold text-slate-800">
-                {staff.name || "Staff Member"}
+                {staff.name ||
+                  "Staff Member"}
               </p>
 
               <p className="text-[11px] text-slate-500">
-                {staff.department_name || "Staff Portal"}
+                {staff.department_name ||
+                  "Staff Portal"}
               </p>
+
             </div>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
-              {(staff.name || "S").charAt(0).toUpperCase()}
+
+              {(staff.name ||
+                "S")
+                .charAt(0)
+                .toUpperCase()}
+
             </div>
 
             <button
@@ -211,50 +407,73 @@ function StaffDashboard() {
               onClick={handleLogout}
               className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
             >
+
               <FiLogOut className="h-5 w-5" />
 
-              <span className="hidden sm:inline">Logout</span>
+              <span className="hidden sm:inline">
+                Logout
+              </span>
+
             </button>
+
           </div>
+
         </div>
+
       </header>
 
       {/* =====================================================
           MAIN
       ===================================================== */}
+
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+
         {/* PAGE HEADER */}
+
         <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+
           <div>
+
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
               Staff Portal
             </p>
 
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Welcome, {staff.name || "Staff Member"} 👋
+              Welcome,{" "}
+              {staff.name ||
+                "Staff Member"}!
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
               Record your daily attendance quickly and securely.
             </p>
+
           </div>
 
           <div className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+
             <FiCalendar className="h-4 w-4 text-blue-600" />
 
             <span className="text-xs font-semibold text-slate-600 sm:text-sm">
               {formattedDate}
             </span>
+
           </div>
+
         </div>
 
         {/* =====================================================
             WELCOME BANNER
         ===================================================== */}
+
         <section className="relative mb-7 overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 p-6 text-white shadow-lg shadow-blue-200 sm:p-8">
+
           <div className="relative z-10 max-w-2xl">
+
             <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
+
               <FiActivity className="h-5 w-5" />
+
             </div>
 
             <h2 className="text-2xl font-bold sm:text-3xl">
@@ -262,77 +481,115 @@ function StaffDashboard() {
             </h2>
 
             <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">
-              Scan the QR code displayed in the staff room to record your
-              attendance. The system automatically records your exact time.
+              Scan the QR code displayed in the staff room to record your attendance. The system automatically records your exact time.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
+
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold backdrop-blur">
-                <span className="h-2 w-2 rounded-full bg-emerald-300" />
+
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
+
                 System Active
+
               </span>
 
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold backdrop-blur">
+
                 <FiShield className="h-3.5 w-3.5" />
+
                 Secure Attendance
+
               </span>
+
             </div>
+
           </div>
 
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10" />
+
           <div className="absolute -bottom-32 right-10 h-80 w-80 rounded-full bg-indigo-900/10" />
+
         </section>
 
         {/* =====================================================
             STAFF INFORMATION
         ===================================================== */}
+
         <section className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
           {/* NAME */}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+
             <div className="flex items-center gap-4">
+
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+
                 <FiUser className="h-5 w-5" />
+
               </div>
 
               <div className="min-w-0">
+
                 <p className="text-xs font-medium text-slate-500">
                   Staff Name
                 </p>
 
                 <p className="mt-1 truncate text-sm font-bold text-slate-800 sm:text-base">
-                  {staff.name || "Not available"}
+                  {staff.name ||
+                    "Not available"}
                 </p>
+
               </div>
+
             </div>
+
           </div>
 
           {/* DEPARTMENT */}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+
             <div className="flex items-center gap-4">
+
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+
                 <FiBriefcase className="h-5 w-5" />
+
               </div>
 
               <div className="min-w-0">
+
                 <p className="text-xs font-medium text-slate-500">
                   Department
                 </p>
 
                 <p className="mt-1 truncate text-sm font-bold text-slate-800 sm:text-base">
-                  {staff.department_name || "Not available"}
+                  {staff.department_name ||
+                    "Not available"}
                 </p>
+
               </div>
+
             </div>
+
           </div>
 
           {/* DATE */}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md sm:col-span-2 lg:col-span-1">
+
             <div className="flex items-center gap-4">
+
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+
                 <FiCalendar className="h-5 w-5" />
+
               </div>
 
               <div>
+
                 <p className="text-xs font-medium text-slate-500">
                   Today's Date
                 </p>
@@ -340,20 +597,113 @@ function StaffDashboard() {
                 <p className="mt-1 text-sm font-bold text-slate-800 sm:text-base">
                   {shortDate}
                 </p>
+
               </div>
+
             </div>
+
           </div>
+
+        </section>
+
+        {/* =====================================================
+            TODAY'S ATTENDANCE TIMES
+        ===================================================== */}
+
+        <section className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+          {/* SIGN-IN TIME */}
+
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+
+            <div className="flex items-center gap-4">
+
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
+
+                <FiClock className="h-5 w-5" />
+
+              </div>
+
+              <div>
+
+                <p className="text-xs font-medium text-blue-700">
+                  Today's Reporting Time
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-slate-900">
+                  {formatTime(
+                    officialSignInTime
+                  )}
+                </p>
+
+                <p className="mt-1 text-[11px] text-blue-600">
+                  {currentDay ===
+                  "Sunday"
+                    ? "Non-working day"
+                    : currentDay ===
+                        "Monday"
+                    ? "Non-working day"
+                    : "Late after this time"}
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* SIGN-OUT TIME */}
+
+          <div className="rounded-2xl border border-violet-100 bg-violet-50 p-5">
+
+            <div className="flex items-center gap-4">
+
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm">
+
+                <FiLogOut className="h-5 w-5" />
+
+              </div>
+
+              <div>
+
+                <p className="text-xs font-medium text-violet-700">
+                  Your Sign-Out Time
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-slate-900">
+                  {formatTime(
+                    officialSignOutTime
+                  )}
+                </p>
+
+                <p className="mt-1 text-[11px] text-violet-600">
+                  Earlier sign-out will be recorded
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
         </section>
 
         {/* =====================================================
             ATTENDANCE SECTION
         ===================================================== */}
+
         <section className="mx-auto max-w-4xl">
+
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+
             {/* CARD HEADER */}
+
             <div className="border-b border-slate-100 px-5 py-6 text-center sm:px-8">
+
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+
                 <FiClock className="h-7 w-7" />
+
               </div>
 
               <h2 className="mt-4 text-xl font-bold text-slate-900 sm:text-2xl">
@@ -361,34 +711,49 @@ function StaffDashboard() {
               </h2>
 
               <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-                Scan today's QR code first, then choose whether you are
-                signing in or signing out.
+                Scan today's QR code first, then choose whether you are signing in or signing out.
               </p>
+
             </div>
 
             <div className="p-5 sm:p-8">
+
               {/* =====================================================
                   QR SCANNER
               ===================================================== */}
+
               {!scannerOpen && (
+
                 <button
                   type="button"
                   onClick={startScanner}
                   className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 px-5 py-5 text-base font-bold text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 active:scale-[0.99] sm:text-lg"
                 >
+
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
+
                     <FiCamera className="h-6 w-6 transition group-hover:scale-110" />
+
                   </span>
 
                   Scan Today's QR Code
+
                 </button>
+
               )}
 
-              {/* SCANNER */}
+              {/* =====================================================
+                  SCANNER
+              ===================================================== */}
+
               {scannerOpen && (
+
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+
                   <div className="mb-4 flex items-center justify-between">
+
                     <div>
+
                       <h3 className="text-sm font-bold text-slate-800 sm:text-base">
                         Scan QR Code
                       </h3>
@@ -396,6 +761,7 @@ function StaffDashboard() {
                       <p className="mt-1 text-xs text-slate-500">
                         Point your camera at the QR code in the staff room.
                       </p>
+
                     </div>
 
                     <button
@@ -403,8 +769,11 @@ function StaffDashboard() {
                       onClick={closeScanner}
                       className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800"
                     >
+
                       <FiX className="h-5 w-5" />
+
                     </button>
+
                   </div>
 
                   <div
@@ -413,24 +782,37 @@ function StaffDashboard() {
                   />
 
                   {scanning && (
+
                     <div className="mt-4 flex items-center justify-center gap-2 text-center text-xs font-medium text-slate-500">
+
                       <span className="h-2 w-2 animate-pulse rounded-full bg-blue-600" />
+
                       Looking for QR code...
+
                     </div>
+
                   )}
+
                 </div>
+
               )}
 
               {/* =====================================================
                   QR SUCCESS
               ===================================================== */}
+
               {qrToken && (
+
                 <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+
                     <FiCheckCircle className="h-5 w-5" />
+
                   </div>
 
                   <div>
+
                     <p className="text-sm font-bold text-emerald-800">
                       QR Code Verified
                     </p>
@@ -438,124 +820,217 @@ function StaffDashboard() {
                     <p className="mt-1 text-xs leading-5 text-emerald-700">
                       The QR code is ready. Choose Sign In or Sign Out below.
                     </p>
+
                   </div>
+
                 </div>
+
               )}
 
               {/* =====================================================
                   SUCCESS MESSAGE
               ===================================================== */}
+
               {message && (
+
                 <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+
                     <FiCheckCircle className="h-5 w-5" />
+
                   </div>
 
                   <p className="pt-1 text-sm font-semibold leading-5 text-emerald-700">
                     {message}
                   </p>
+
                 </div>
+
               )}
 
               {/* =====================================================
                   ERROR MESSAGE
               ===================================================== */}
+
               {error && (
+
                 <div className="mt-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
+
                     <FiAlertCircle className="h-5 w-5" />
+
                   </div>
 
                   <p className="pt-1 text-sm font-semibold leading-5 text-red-700">
                     {error}
                   </p>
+
                 </div>
+
               )}
 
               {/* =====================================================
                   ACTION BUTTONS
               ===================================================== */}
+
               <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
+
                 <button
                   type="button"
-                  onClick={() => handleAttendance("SIGN IN")}
-                  disabled={loading || !qrToken}
+                  onClick={() =>
+                    handleAttendance(
+                      "SIGN IN"
+                    )
+                  }
+                  disabled={
+                    loading ||
+                    !qrToken
+                  }
                   className="flex min-h-[62px] items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:text-lg"
                 >
+
                   <FiCheckCircle className="h-6 w-6" />
 
-                  {loading && action === "SIGN IN"
+                  {loading &&
+                  action ===
+                    "SIGN IN"
                     ? "Processing..."
                     : "SIGN IN"}
+
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => handleAttendance("SIGN OUT")}
-                  disabled={loading || !qrToken}
+                  onClick={() =>
+                    handleAttendance(
+                      "SIGN OUT"
+                    )
+                  }
+                  disabled={
+                    loading ||
+                    !qrToken
+                  }
                   className="flex min-h-[62px] items-center justify-center gap-3 rounded-2xl bg-red-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:text-lg"
                 >
+
                   <FiClock className="h-6 w-6" />
 
-                  {loading && action === "SIGN OUT"
+                  {loading &&
+                  action ===
+                    "SIGN OUT"
                     ? "Processing..."
                     : "SIGN OUT"}
+
                 </button>
+
               </div>
 
               {/* =====================================================
                   ATTENDANCE RULES
               ===================================================== */}
+
               <div className="mt-7 rounded-2xl border border-slate-100 bg-slate-50 p-5">
+
                 <div className="flex items-center gap-2">
+
                   <FiShield className="h-4 w-4 text-blue-600" />
 
                   <h3 className="text-sm font-bold text-slate-800">
                     Attendance Rules
                   </h3>
+
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 text-xs leading-5 text-slate-500 sm:grid-cols-2">
+
+                  {/* REPORTING TIME */}
+
                   <div className="rounded-xl bg-white p-3 shadow-sm">
+
                     <span className="font-semibold text-slate-700">
                       Reporting time:
                     </span>{" "}
-                    Staff arriving after 7:33 AM will be marked Late.
+
+                    {currentDay ===
+                    "Sunday"
+                      ? "Sunday is not a working day."
+                      : currentDay ===
+                          "Monday"
+                      ? "Monday is not a working day."
+                      : `Staff arriving after ${formatTime(
+                          officialSignInTime
+                        )} will be marked Late.`}
+
                   </div>
 
+                  {/* SIGN OUT */}
+
                   <div className="rounded-xl bg-white p-3 shadow-sm">
+
                     <span className="font-semibold text-slate-700">
                       Early departure:
                     </span>{" "}
-                    Signing out before 5:00 PM will be recorded.
+
+                    Signing out before{" "}
+                    <strong>
+                      {formatTime(
+                        officialSignOutTime
+                      )}
+                    </strong>{" "}
+                    will be recorded.
+
                   </div>
 
+                  {/* SIGN OUT REQUIREMENT */}
+
                   <div className="rounded-xl bg-white p-3 shadow-sm">
+
                     <span className="font-semibold text-slate-700">
                       Sign out:
                     </span>{" "}
+
                     You must sign in before signing out.
+
                   </div>
 
+                  {/* AUTOMATIC TIME */}
+
                   <div className="rounded-xl bg-white p-3 shadow-sm">
+
                     <span className="font-semibold text-slate-700">
                       Automatic time:
                     </span>{" "}
+
                     The system records the date and time automatically.
+
                   </div>
+
                 </div>
+
               </div>
+
             </div>
+
           </div>
+
         </section>
 
-        {/* FOOTER */}
+        {/* =====================================================
+            FOOTER
+        ===================================================== */}
+
         <div className="mt-7 text-center">
+
           <p className="text-[11px] text-slate-400">
             VOTECH S7 ACADEMY • Staff Attendance Management System
           </p>
+
         </div>
+
       </main>
+
     </div>
   );
 }

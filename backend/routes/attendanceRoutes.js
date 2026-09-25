@@ -45,42 +45,32 @@ function getAttendanceSettings() {
     }
 
     const settings = JSON.parse(
-      fs.readFileSync(
-        settingsPath,
-        "utf8"
-      )
+      fs.readFileSync(settingsPath, "utf8")
     );
 
-    // Support the old reportingTime setting
     const legacyReportingTime =
-      settings.reportingTime ||
-      "07:33";
+      settings.reportingTime || "07:33";
 
     return {
       signInTimes: {
         Tuesday:
-          settings.signInTimes
-            ?.Tuesday ||
+          settings.signInTimes?.Tuesday ||
           legacyReportingTime,
 
         Wednesday:
-          settings.signInTimes
-            ?.Wednesday ||
+          settings.signInTimes?.Wednesday ||
           legacyReportingTime,
 
         Thursday:
-          settings.signInTimes
-            ?.Thursday ||
+          settings.signInTimes?.Thursday ||
           legacyReportingTime,
 
         Friday:
-          settings.signInTimes
-            ?.Friday ||
+          settings.signInTimes?.Friday ||
           legacyReportingTime,
 
         Saturday:
-          settings.signInTimes
-            ?.Saturday ||
+          settings.signInTimes?.Saturday ||
           legacyReportingTime,
       },
 
@@ -110,8 +100,7 @@ function getAttendanceSettings() {
 function getCameroonDate() {
   const today = new Date();
 
-  const year =
-    today.getFullYear();
+  const year = today.getFullYear();
 
   const month = String(
     today.getMonth() + 1
@@ -131,14 +120,9 @@ function getCameroonDate() {
 function getCameroonTime() {
   const now = new Date();
 
-  const hours =
-    now.getHours();
-
-  const minutes =
-    now.getMinutes();
-
-  const seconds =
-    now.getSeconds();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
 
   return (
     `${String(hours).padStart(2, "0")}:` +
@@ -162,9 +146,7 @@ function getCurrentDayName() {
     "Saturday",
   ];
 
-  return days[
-    new Date().getDay()
-  ];
+  return days[new Date().getDay()];
 }
 
 // =====================================================
@@ -172,17 +154,11 @@ function getCurrentDayName() {
 // =====================================================
 
 function timeToMinutes(time) {
-  const [
-    hours,
-    minutes,
-  ] = String(time)
+  const [hours, minutes] = String(time)
     .split(":")
     .map(Number);
 
-  return (
-    hours * 60 +
-    minutes
-  );
+  return hours * 60 + minutes;
 }
 
 // =====================================================
@@ -190,135 +166,118 @@ function timeToMinutes(time) {
 // POST /api/attendance/scan
 // =====================================================
 
-router.post(
-  "/scan",
-  async (req, res) => {
-    try {
-      const {
+router.post("/scan", async (req, res) => {
+  try {
+    const {
+      staff_id,
+      token,
+      action,
+    } = req.body;
+
+    // =================================================
+    // VALIDATE REQUEST
+    // =================================================
+
+    if (!staff_id || !token || !action) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Staff ID, QR token and action are required.",
+      });
+    }
+
+    if (
+      action !== "SIGN IN" &&
+      action !== "SIGN OUT"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance action.",
+      });
+    }
+
+    // =================================================
+    // FIND STAFF
+    // =================================================
+
+    const [staffRows] = await db.query(
+      `
+      SELECT
         staff_id,
+        name,
+        department_id,
+        status,
+        sign_out_time
+      FROM staff
+      WHERE staff_id = ?
+      `,
+      [staff_id]
+    );
+
+    if (staffRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Staff member not found.",
+      });
+    }
+
+    const staff = staffRows[0];
+
+    // =================================================
+    // CHECK STAFF STATUS
+    // =================================================
+
+    if (staff.status !== "Active") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "This staff account is inactive.",
+      });
+    }
+
+    // =================================================
+    // CURRENT CAMEROON DATE
+    // =================================================
+
+    const attendanceDate =
+      getCameroonDate();
+
+    // =================================================
+    // VALIDATE TODAY'S QR TOKEN
+    // =================================================
+
+    const [tokenRows] = await db.query(
+      `
+      SELECT
+        token_id,
         token,
-        action,
-      } = req.body;
+        token_date,
+        status
+      FROM qr_tokens
+      WHERE token = ?
+      AND token_date = ?
+      AND status = 'Active'
+      `,
+      [
+        token,
+        attendanceDate,
+      ]
+    );
 
-      // -------------------------------------------------
-      // VALIDATE REQUEST
-      // -------------------------------------------------
+    if (tokenRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid or expired QR code. Please scan today's QR code.",
+      });
+    }
 
-      if (
-        !staff_id ||
-        !token ||
-        !action
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Staff ID, QR token and action are required.",
-        });
-      }
+    // =================================================
+    // FIND TODAY'S ATTENDANCE
+    // =================================================
 
-      if (
-        action !== "SIGN IN" &&
-        action !== "SIGN OUT"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid attendance action.",
-        });
-      }
-
-      // -------------------------------------------------
-      // FIND STAFF
-      // -------------------------------------------------
-
-      const [staffRows] =
-        await db.query(
-          `
-          SELECT
-            staff_id,
-            name,
-            department_id,
-            status,
-            sign_out_time
-          FROM staff
-          WHERE staff_id = ?
-          `,
-          [staff_id]
-        );
-
-      if (staffRows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Staff member not found.",
-        });
-      }
-
-      const staff =
-        staffRows[0];
-
-      // -------------------------------------------------
-      // CHECK STAFF STATUS
-      // -------------------------------------------------
-
-      if (
-        staff.status !==
-        "Active"
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "This staff account is inactive.",
-        });
-      }
-
-      // =================================================
-      // CURRENT CAMEROON DATE
-      // =================================================
-
-      const attendanceDate =
-        getCameroonDate();
-
-      // =================================================
-      // VALIDATE TODAY'S QR TOKEN
-      // =================================================
-
-      const [tokenRows] =
-        await db.query(
-          `
-          SELECT
-            token_id,
-            token,
-            token_date,
-            status
-          FROM qr_tokens
-          WHERE token = ?
-          AND token_date = ?
-          AND status = 'Active'
-          `,
-          [
-            token,
-            attendanceDate,
-          ]
-        );
-
-      if (
-        tokenRows.length === 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid or expired QR code. Please scan today's QR code.",
-        });
-      }
-
-      // =================================================
-      // FIND TODAY'S ATTENDANCE
-      // =================================================
-
-      const [
-        attendanceRows,
-      ] = await db.query(
+    const [attendanceRows] =
+      await db.query(
         `
         SELECT
           attendance_id,
@@ -336,338 +295,305 @@ router.post(
         ]
       );
 
-      // =================================================
-      // SIGN IN
-      // =================================================
+    // =================================================
+    // SIGN IN
+    // =================================================
+
+    if (action === "SIGN IN") {
+      // ------------------------------------------------
+      // PREVENT DUPLICATE SIGN-IN
+      // ------------------------------------------------
 
       if (
-        action === "SIGN IN"
+        attendanceRows.length > 0 &&
+        attendanceRows[0].time_in
       ) {
-        // ------------------------------------------------
-        // PREVENT DUPLICATE SIGN-IN
-        // ------------------------------------------------
-
-        if (
-          attendanceRows.length >
-            0 &&
-          attendanceRows[0]
-            .time_in
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "You have already signed in today.",
-          });
-        }
-
-        // ------------------------------------------------
-        // CURRENT TIME
-        // ------------------------------------------------
-
-        const currentTime =
-          getCameroonTime();
-
-        const now =
-          new Date();
-
-        const hours =
-          now.getHours();
-
-        const minutes =
-          now.getMinutes();
-
-        const currentMinutes =
-          hours * 60 +
-          minutes;
-
-        // ------------------------------------------------
-        // GET SETTINGS
-        // ------------------------------------------------
-
-        const settings =
-          getAttendanceSettings();
-
-        const dayName =
-          getCurrentDayName();
-
-        // ------------------------------------------------
-        // GET DAY'S SIGN-IN TIME
-        // ------------------------------------------------
-
-        const reportingTime =
-          settings.signInTimes[
-            dayName
-          ] || "07:33";
-
-        const deadlineMinutes =
-          timeToMinutes(
-            reportingTime
-          );
-
-        // ------------------------------------------------
-        // CALCULATE LATE STATUS
-        // ------------------------------------------------
-
-        let status =
-          "Present";
-
-        let lateMinutes =
-          0;
-
-        if (
-          currentMinutes >
-          deadlineMinutes
-        ) {
-          status =
-            "Late";
-
-          lateMinutes =
-            currentMinutes -
-            deadlineMinutes;
-        }
-
-        // ------------------------------------------------
-        // UPDATE EXISTING ATTENDANCE
-        // ------------------------------------------------
-
-        if (
-          attendanceRows.length >
-          0
-        ) {
-          await db.query(
-            `
-            UPDATE attendance
-            SET
-              time_in = ?,
-              status = ?,
-              late_minutes = ?
-            WHERE attendance_id = ?
-            `,
-            [
-              currentTime,
-              status,
-              lateMinutes,
-              attendanceRows[0]
-                .attendance_id,
-            ]
-          );
-        }
-
-        // ------------------------------------------------
-        // CREATE NEW ATTENDANCE
-        // ------------------------------------------------
-
-        else {
-          await db.query(
-            `
-            INSERT INTO attendance
-            (
-              staff_id,
-              attendance_date,
-              time_in,
-              status,
-              late_minutes
-            )
-            VALUES (?, ?, ?, ?, ?)
-            `,
-            [
-              staff_id,
-              attendanceDate,
-              currentTime,
-              status,
-              lateMinutes,
-            ]
-          );
-        }
-
-        // ------------------------------------------------
-        // RESPONSE
-        // ------------------------------------------------
-
-        return res.json({
-          success: true,
-
+        return res.status(400).json({
+          success: false,
           message:
-            status === "Late"
-              ? `Sign in successful. You are ${lateMinutes} minute(s) late.`
-              : "Sign in successful. You are on time.",
-
-          attendance: {
-            staff_id,
-            name:
-              staff.name,
-            date:
-              attendanceDate,
-            day:
-              dayName,
-            official_sign_in:
-              reportingTime,
-            time_in:
-              currentTime,
-            status,
-            late_minutes:
-              lateMinutes,
-          },
+            "You have already signed in today.",
         });
       }
 
-      // =================================================
-      // SIGN OUT
-      // =================================================
+      // ------------------------------------------------
+      // CURRENT CAMEROON TIME
+      // ------------------------------------------------
+
+      const currentTime =
+        getCameroonTime();
+
+      const now = new Date();
+
+      const currentMinutes =
+        now.getHours() * 60 +
+        now.getMinutes();
+
+      // ------------------------------------------------
+      // GET SETTINGS
+      // ------------------------------------------------
+
+      const settings =
+        getAttendanceSettings();
+
+      const dayName =
+        getCurrentDayName();
+
+      // ------------------------------------------------
+      // GET DAY'S SIGN-IN TIME
+      // ------------------------------------------------
+
+      const reportingTime =
+        settings.signInTimes[dayName] ||
+        "07:33";
+
+      const deadlineMinutes =
+        timeToMinutes(reportingTime);
+
+      // ------------------------------------------------
+      // CALCULATE LATE STATUS
+      // ------------------------------------------------
+
+      let status = "Present";
+      let lateMinutes = 0;
 
       if (
-        action === "SIGN OUT"
+        currentMinutes >
+        deadlineMinutes
       ) {
-        // ------------------------------------------------
-        // MUST SIGN IN FIRST
-        // ------------------------------------------------
+        status = "Late";
 
-        if (
-          attendanceRows.length ===
-            0 ||
-          !attendanceRows[0]
-            .time_in
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "You cannot sign out because you have not signed in today.",
-          });
-        }
+        lateMinutes =
+          currentMinutes -
+          deadlineMinutes;
+      }
 
-        // ------------------------------------------------
-        // PREVENT DUPLICATE SIGN-OUT
-        // ------------------------------------------------
+      // ------------------------------------------------
+      // UPDATE EXISTING ATTENDANCE
+      // ------------------------------------------------
 
-        if (
-          attendanceRows[0]
-            .time_out
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "You have already signed out today.",
-          });
-        }
-
-        // ------------------------------------------------
-        // CURRENT TIME
-        // ------------------------------------------------
-
-        const currentTime =
-          getCameroonTime();
-
-        const now =
-          new Date();
-
-        const hours =
-          now.getHours();
-
-        const minutes =
-          now.getMinutes();
-
-        const currentMinutes =
-          hours * 60 +
-          minutes;
-
-        // ------------------------------------------------
-        // GET SETTINGS
-        // ------------------------------------------------
-
-        const settings =
-          getAttendanceSettings();
-
-        // ------------------------------------------------
-        // GET INDIVIDUAL STAFF SIGN-OUT
-        // ------------------------------------------------
-
-        const officialSignOutTime =
-          staff.sign_out_time ||
-          settings.signOutTime;
-
-        const signOutTargetMinutes =
-          timeToMinutes(
-            officialSignOutTime
-          );
-
-        // ------------------------------------------------
-        // DEPARTURE MESSAGE
-        // ------------------------------------------------
-
-        let departureMessage =
-          "Sign out successful.";
-
-        if (
-          currentMinutes <
-          signOutTargetMinutes
-        ) {
-          departureMessage =
-            `Sign out recorded. You left before your ${officialSignOutTime} sign-out time.`;
-        }
-
-        // ------------------------------------------------
-        // SAVE SIGN-OUT
-        // ------------------------------------------------
-
+      if (attendanceRows.length > 0) {
         await db.query(
           `
           UPDATE attendance
-          SET time_out = ?
+          SET
+            time_in = ?,
+            status = ?,
+            late_minutes = ?
           WHERE attendance_id = ?
           `,
           [
             currentTime,
+            status,
+            lateMinutes,
             attendanceRows[0]
               .attendance_id,
           ]
         );
-
-        // ------------------------------------------------
-        // RESPONSE
-        // ------------------------------------------------
-
-        return res.json({
-          success: true,
-
-          message:
-            departureMessage,
-
-          attendance: {
-            staff_id,
-            name:
-              staff.name,
-            date:
-              attendanceDate,
-            time_in:
-              attendanceRows[0]
-                .time_in,
-            time_out:
-              currentTime,
-            official_sign_out:
-              officialSignOutTime,
-            status:
-              attendanceRows[0]
-                .status,
-            late_minutes:
-              attendanceRows[0]
-                .late_minutes,
-          },
-        });
       }
-    } catch (error) {
-      console.error(
-        "Attendance error:",
-        error
-      );
 
-      return res.status(500).json({
-        success: false,
+      // ------------------------------------------------
+      // CREATE NEW ATTENDANCE
+      // ------------------------------------------------
+
+      else {
+        await db.query(
+          `
+          INSERT INTO attendance
+          (
+            staff_id,
+            attendance_date,
+            time_in,
+            status,
+            late_minutes
+          )
+          VALUES (?, ?, ?, ?, ?)
+          `,
+          [
+            staff_id,
+            attendanceDate,
+            currentTime,
+            status,
+            lateMinutes,
+          ]
+        );
+      }
+
+      // ------------------------------------------------
+      // RESPONSE
+      // ------------------------------------------------
+
+      return res.json({
+        success: true,
+
         message:
-          "Server error while recording attendance.",
+          status === "Late"
+            ? `Sign in successful. You are ${lateMinutes} minute(s) late.`
+            : "Sign in successful. You are on time.",
+
+        attendance: {
+          staff_id,
+          name: staff.name,
+          date: attendanceDate,
+          day: dayName,
+          official_sign_in:
+            reportingTime,
+          time_in: currentTime,
+          status,
+          late_minutes:
+            lateMinutes,
+        },
       });
     }
+
+    // =================================================
+    // SIGN OUT
+    // =================================================
+
+    if (action === "SIGN OUT") {
+      // ------------------------------------------------
+      // MUST SIGN IN FIRST
+      // ------------------------------------------------
+
+      if (
+        attendanceRows.length === 0 ||
+        !attendanceRows[0].time_in
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "You cannot sign out because you have not signed in today.",
+        });
+      }
+
+      // ------------------------------------------------
+      // PREVENT DUPLICATE SIGN-OUT
+      // ------------------------------------------------
+
+      if (attendanceRows[0].time_out) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "You have already signed out today.",
+        });
+      }
+
+      // ------------------------------------------------
+      // CURRENT CAMEROON TIME
+      // ------------------------------------------------
+
+      const currentTime =
+        getCameroonTime();
+
+      const now = new Date();
+
+      const currentMinutes =
+        now.getHours() * 60 +
+        now.getMinutes();
+
+      // ------------------------------------------------
+      // GET SETTINGS
+      // ------------------------------------------------
+
+      const settings =
+        getAttendanceSettings();
+
+      // ------------------------------------------------
+      // INDIVIDUAL STAFF SIGN-OUT TIME
+      // ------------------------------------------------
+
+      const officialSignOutTime =
+        staff.sign_out_time ||
+        settings.signOutTime;
+
+      const signOutTargetMinutes =
+        timeToMinutes(
+          officialSignOutTime
+        );
+
+      // ------------------------------------------------
+      // DEPARTURE MESSAGE
+      // ------------------------------------------------
+
+      let departureMessage =
+        "Sign out successful.";
+
+      if (
+        currentMinutes <
+        signOutTargetMinutes
+      ) {
+        departureMessage =
+          `Sign out recorded. You left before your ${officialSignOutTime} sign-out time.`;
+      }
+
+      // ------------------------------------------------
+      // SAVE SIGN-OUT
+      // ------------------------------------------------
+
+      await db.query(
+        `
+        UPDATE attendance
+        SET time_out = ?
+        WHERE attendance_id = ?
+        `,
+        [
+          currentTime,
+          attendanceRows[0]
+            .attendance_id,
+        ]
+      );
+
+      // ------------------------------------------------
+      // RESPONSE
+      // ------------------------------------------------
+
+      return res.json({
+        success: true,
+
+        message:
+          departureMessage,
+
+        attendance: {
+          staff_id,
+          name: staff.name,
+          date: attendanceDate,
+          time_in:
+            attendanceRows[0]
+              .time_in,
+          time_out:
+            currentTime,
+          official_sign_out:
+            officialSignOutTime,
+          status:
+            attendanceRows[0]
+              .status,
+          late_minutes:
+            attendanceRows[0]
+              .late_minutes,
+        },
+      });
+    }
+  } catch (error) {
+    // =================================================
+    // REAL ERROR LOG
+    // =================================================
+
+    console.error(
+      "Attendance error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Server error while recording attendance.",
+      error:
+        process.env.NODE_ENV ===
+        "development"
+          ? error.message
+          : undefined,
+    });
   }
-);
+});
 
 // =====================================================
 // GET ATTENDANCE RECORDS
@@ -706,7 +632,8 @@ router.get(
           INNER JOIN staff s
             ON a.staff_id = s.staff_id
           LEFT JOIN departments d
-            ON s.department_id = d.department_id
+            ON s.department_id =
+              d.department_id
           WHERE a.attendance_date = ?
           ORDER BY a.time_in ASC
           `,
@@ -842,23 +769,18 @@ router.get(
         fullMonthEndDate;
 
       if (
-        reportYear ===
-          todayYear &&
-        reportMonth ===
-          todayMonth
+        reportYear === todayYear &&
+        reportMonth === todayMonth
       ) {
         reportEndDate =
           todayString;
       }
 
       if (
-        reportYear >
-          todayYear ||
+        reportYear > todayYear ||
         (
-          reportYear ===
-            todayYear &&
-          reportMonth >
-            todayMonth
+          reportYear === todayYear &&
+          reportMonth > todayMonth
         )
       ) {
         reportEndDate = null;
@@ -892,36 +814,34 @@ router.get(
       // LOAD ATTENDANCE
       // -------------------------------------------------
 
-      let attendanceRows =
-        [];
+      let attendanceRows = [];
 
       if (reportEndDate) {
-        [
-          attendanceRows,
-        ] = await db.query(
-          `
-          SELECT
-            a.attendance_id,
-            a.staff_id,
-            DATE_FORMAT(
-              a.attendance_date,
-              '%Y-%m-%d'
-            ) AS attendance_date,
-            a.time_in,
-            a.time_out,
-            a.status,
-            a.late_minutes
-          FROM attendance a
-          WHERE a.attendance_date
-          BETWEEN ? AND ?
-          ORDER BY
-            a.attendance_date ASC
-          `,
-          [
-            startDate,
-            reportEndDate,
-          ]
-        );
+        [attendanceRows] =
+          await db.query(
+            `
+            SELECT
+              a.attendance_id,
+              a.staff_id,
+              DATE_FORMAT(
+                a.attendance_date,
+                '%Y-%m-%d'
+              ) AS attendance_date,
+              a.time_in,
+              a.time_out,
+              a.status,
+              a.late_minutes
+            FROM attendance a
+            WHERE a.attendance_date
+            BETWEEN ? AND ?
+            ORDER BY
+              a.attendance_date ASC
+            `,
+            [
+              startDate,
+              reportEndDate,
+            ]
+          );
       }
 
       // -------------------------------------------------
@@ -947,8 +867,7 @@ router.get(
       // BUILD WORKING DATES
       // -------------------------------------------------
 
-      const workingDates =
-        [];
+      const workingDates = [];
 
       if (reportEndDate) {
         const cursor =
@@ -969,10 +888,8 @@ router.get(
             cursor.getDate();
 
           if (
-            currentYear !==
-              reportYear ||
-            currentMonth !==
-              reportMonth
+            currentYear !== reportYear ||
+            currentMonth !== reportMonth
           ) {
             break;
           }
@@ -1009,7 +926,6 @@ router.get(
           const dayName =
             dayNames[dayOfWeek];
 
-          // Use the Settings workingDays
           if (
             settings.workingDays[
               dayName
@@ -1040,10 +956,8 @@ router.get(
             let lateDays = 0;
             let absentDays = 0;
             let incompleteDays = 0;
-            let earlyDepartureDays =
-              0;
-            let lateMinutesTotal =
-              0;
+            let earlyDepartureDays = 0;
+            let lateMinutesTotal = 0;
 
             workingDates.forEach(
               (date) => {
@@ -1055,22 +969,12 @@ router.get(
                     key
                   );
 
-                // ----------------------------------------
-                // ABSENT
-                // ----------------------------------------
-
                 if (!record) {
                   absentDays++;
                   return;
                 }
 
-                // ----------------------------------------
-                // PRESENT
-                // ----------------------------------------
-
-                if (
-                  record.time_in
-                ) {
+                if (record.time_in) {
                   presentDays++;
 
                   if (
@@ -1082,28 +986,15 @@ router.get(
 
                   lateMinutesTotal +=
                     Number(
-                      record.late_minutes ||
-                        0
+                      record.late_minutes || 0
                     );
                 }
 
-                // ----------------------------------------
-                // INCOMPLETE
-                // ----------------------------------------
-
-                if (
-                  !record.time_out
-                ) {
+                if (!record.time_out) {
                   incompleteDays++;
                 }
 
-                // ----------------------------------------
-                // EARLY DEPARTURE
-                // ----------------------------------------
-
-                if (
-                  record.time_out
-                ) {
+                if (record.time_out) {
                   const timeParts =
                     String(
                       record.time_out
@@ -1111,14 +1002,12 @@ router.get(
 
                   const hours =
                     Number(
-                      timeParts[0] ||
-                        0
+                      timeParts[0] || 0
                     );
 
                   const minutes =
                     Number(
-                      timeParts[1] ||
-                        0
+                      timeParts[1] || 0
                     );
 
                   const totalMinutes =
@@ -1144,10 +1033,6 @@ router.get(
               }
             );
 
-            // ----------------------------------------
-            // ATTENDANCE PERCENTAGE
-            // ----------------------------------------
-
             const attendancePercentage =
               workingDays > 0
                 ? Number(
@@ -1160,10 +1045,6 @@ router.get(
                     ).toFixed(1)
                   )
                 : 0;
-
-            // ----------------------------------------
-            // STAFF REPORT
-            // ----------------------------------------
 
             return {
               staff_id:
@@ -1275,10 +1156,6 @@ router.get(
             0
           ),
       };
-
-      // -------------------------------------------------
-      // RESPONSE
-      // -------------------------------------------------
 
       return res.json({
         success: true,
