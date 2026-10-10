@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   FiCalendar,
   FiPrinter,
@@ -127,7 +127,22 @@ function Reports() {
         "department_name",
         "departmentName",
       ],
-      "—"
+      "â€”"
+    );
+
+  const getWorkingDays = (row) =>
+    Number(
+      getValue(
+        row,
+        [
+          "working_days",
+          "Working_Days",
+          "workingDays",
+          "total_days",
+          "Total_Days",
+        ],
+        0
+      )
     );
 
   const getPresentDays = (row) =>
@@ -271,39 +286,20 @@ function Reports() {
       }
 
       const rows = report
-        .map((row, index) => {
+        .map((row) => {
+          const workingDays = getWorkingDays(row);
           const present = getPresentDays(row);
           const late = getLateDays(row);
-          const absent = getAbsentDays(row);
           const lateMin = getLateMinutes(row);
 
           return `
             <tr>
-              <td class="number">${index + 1}</td>
-
-              <td class="staff-name">
-                ${getName(row)}
-              </td>
-
-              <td>
-                ${getDepartment(row)}
-              </td>
-
-              <td class="center present">
-                ${present}
-              </td>
-
-              <td class="center late">
-                ${late}
-              </td>
-
-              <td class="center absent">
-                ${absent}
-              </td>
-
-              <td class="center total-late">
-                ${lateMin}
-              </td>
+              <td class="staff-name">${getName(row)}</td>
+              <td>${getDepartment(row)}</td>
+              <td class="center">${workingDays}</td>
+              <td class="center late">${late}</td>
+              <td class="center present">${present}</td>
+              <td class="center total-late">${lateMin}</td>
             </tr>
           `;
         })
@@ -624,17 +620,14 @@ function Reports() {
             <table>
 
               <thead>
-
                 <tr>
-                  <th>No.</th>
                   <th>Staff Name</th>
                   <th>Department</th>
-                  <th>Present Days</th>
+                  <th>TOTAL DAYS</th>
                   <th>Late Days</th>
-                  <th>Absent Days</th>
-                  <th>Total Late (Min)</th>
+                  <th>PRESENT DAYS</th>
+                  <th>Total Late MINUTES</th>
                 </tr>
-
               </thead>
 
               <tbody>
@@ -848,7 +841,7 @@ function Reports() {
                 </p>
 
                 <p className="mt-2 text-3xl font-bold text-slate-900">
-                  {loading ? "—" : summary.totalStaff}
+                  {loading ? "â€”" : summary.totalStaff}
                 </p>
 
                 <p className="mt-1 text-xs text-slate-400">
@@ -871,7 +864,7 @@ function Reports() {
                 </p>
 
                 <p className="mt-2 text-3xl font-bold text-slate-900">
-                  {loading ? "—" : summary.presentDays}
+                  {loading ? "â€”" : summary.presentDays}
                 </p>
 
                 <p className="mt-1 text-xs text-emerald-600">
@@ -894,7 +887,7 @@ function Reports() {
                 </p>
 
                 <p className="mt-2 text-3xl font-bold text-slate-900">
-                  {loading ? "—" : summary.lateDays}
+                  {loading ? "â€”" : summary.lateDays}
                 </p>
 
                 <p className="mt-1 text-xs text-amber-600">
@@ -917,7 +910,7 @@ function Reports() {
                 </p>
 
                 <p className="mt-2 text-3xl font-bold text-slate-900">
-                  {loading ? "—" : summary.lateMinutes}
+                  {loading ? "â€”" : summary.lateMinutes}
                 </p>
 
                 <p className="mt-1 text-xs text-violet-600">
@@ -962,31 +955,22 @@ function Reports() {
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
                   <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    #
-                  </th>
-
-                  <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Staff Name
                   </th>
-
                   <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Department
                   </th>
-
                   <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Present Days
+                    TOTAL DAYS
                   </th>
-
                   <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Late Days
                   </th>
-
                   <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Absent Days
+                    PRESENT DAYS
                   </th>
-
                   <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Total Late
+                    Total Late MINUTES
                   </th>
                 </tr>
               </thead>
@@ -995,7 +979,7 @@ function Reports() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="7"
+                      colSpan="6"
                       className="px-5 py-14 text-center"
                     >
                       <FiRefreshCw className="mx-auto h-6 w-6 animate-spin text-blue-600" />
@@ -1008,7 +992,7 @@ function Reports() {
                 ) : report.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="7"
+                      colSpan="6"
                       className="px-5 py-14 text-center"
                     >
                       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
@@ -1026,9 +1010,9 @@ function Reports() {
                   </tr>
                 ) : (
                   report.map((row, index) => {
+                    const workingDays = getWorkingDays(row);
                     const present = getPresentDays(row);
                     const late = getLateDays(row);
-                    const absent = getAbsentDays(row);
                     const lateMin = getLateMinutes(row);
 
                     return (
@@ -1040,9 +1024,7 @@ function Reports() {
                         }
                         className="transition hover:bg-slate-50"
                       >
-                        <td className="px-5 py-4 text-sm font-medium text-slate-400">
-                          {index + 1}
-                        </td>
+                        
 
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
@@ -1065,20 +1047,18 @@ function Reports() {
                         </td>
 
                         <td className="px-5 py-4 text-center">
-                          <span className="inline-flex min-w-10 justify-center rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700">
-                            {present}
+                          <span className="inline-flex min-w-10 justify-center rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-700">
+                            {workingDays}
                           </span>
                         </td>
-
                         <td className="px-5 py-4 text-center">
                           <span className="inline-flex min-w-10 justify-center rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700">
                             {late}
                           </span>
                         </td>
-
                         <td className="px-5 py-4 text-center">
-                          <span className="inline-flex min-w-10 justify-center rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700">
-                            {absent}
+                          <span className="inline-flex min-w-10 justify-center rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700">
+                            {present}
                           </span>
                         </td>
 
@@ -1155,3 +1135,4 @@ function Reports() {
 }
 
 export default Reports;
+
